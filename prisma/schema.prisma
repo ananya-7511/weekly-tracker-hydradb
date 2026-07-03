@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (port 6543, pgbouncer) — what the running app queries through.
+  url       = env("DATABASE_URL")
+  // Direct connection (port 5432) — required for migrations; pooled connections
+  // can't run the transactions `prisma migrate` needs. Only relevant on Supabase/
+  // hosted Postgres with a pooler in front; local Postgres can point both at the
+  // same URL.
+  directUrl = env("DIRECT_URL")
+}
+
+enum ReportStatus {
+  draft
+  ready_for_decisions
+  published
+}
+
+enum SignalType {
+  source_quality
+  time_to_activation
+  organic_impressions
+  churned_inactive
+}
+
+enum MentionSource {
+  paid
+  organic
+}
+
+enum MentionPlatform {
+  reddit
+  youtube
+  medium
+  linkedin
+  x
+  discord
+}
+
+/// Only `verified` and `posting` are real values observed in the CommunityMentions
+/// export (Section 5 of the PRD) — `removed` is kept for a status that hasn't shown
+/// up yet but is explicitly anticipated (a comment taken down after going live).
+/// Organic entries leave this null — they have no machine-verification lifecycle.
+enum MentionStatus {
+  verified
+  posting
+  removed
+}
+
+enum MentionSourceMethod {
+  slack_ingest
+  manual_csv
+  manual_entry
+}
+
+enum Brand {
+  hydradb
+  skillmake
+}
+
+enum TriggerType {
+  signups_down
+  low_activation
+  channel_dominant
+  channel_zero_streak
+  blog_growing
+  mentions_search_flat
+  mentions_platform_zero_streak
+  organic_share_declining
+}
+
+model WeeklyReport {
+  id            String       @id @default(uuid())
+  weekStartDate DateTime     @unique
+  weekEndDate   DateTime
+  status        ReportStatus @default(draft)
+  createdBy     String?
+  publishedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  outcomeMetrics   OutcomeMetrics?
+  channelMetrics   ChannelMetrics[]
+  weeklyExtras     WeeklyExtras?
+  signalNotes      SignalNote[]
+  searchVisibility SearchVisibilityMetrics?
+  brandMentions    BrandMention[]
+  interventionFlags InterventionFlag[]
+  decisions        Decision[]
+
+  @@index([status])
+  @@index([weekStartDate])
+}
+
+/// Layer 1 — Outcome metrics. Every nullable numeric field is paired with a
+/// `*NaReason` field so FR-3 ("value or explicit N/A") is enforced at the schema
+/// level, not just in the UI.
+model OutcomeMetrics {
+  id       String       @id @default(uuid())
+  reportId String       @unique
+  report   WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  newSignups          Int?
+  newSignupsNaReason  String?
+  newSignupsPulledAt  DateTime?
+  newSignupsSource    String?
+
+  activatedUsers         Int?
+  activatedUsersNaReason String?
+  activatedUsersPulledAt DateTime?
+
+  /// Computed = activatedUsers / newSignups, never re-entered by hand (FR-7).
+  activationRate      Float?
+  /// Computed = this week's newSignups / prior week's, as a percentage (FR-7).
+  wowSignupGrowthPct  Float?
+}
+
+/// Layer 2 — one row per utm_source per week (FR-9).
+model ChannelMetrics {
+  id        String       @id @default(uuid())
+  reportId  String
+  report    WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  utmSource String
+  signups   Int?
+  naReason  String?
+  pulledAt  DateTime?
+
+  @@unique([reportId, utmSource])
+  @@index([utmSource])
+}
+
+/// Layer 2 fields that don't repeat per-channel.
+model WeeklyExtras {
+  id       String       @id @default(uuid())
+  reportId String       @unique
+  report   WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  /// Manual freetext in Phase 1 per the PRD's own permitted fallback (Section 3) —
+  /// still explicitly labeled "DevRel" so the naming convention is established
+  /// from day one, ready to be swapped for a real Content Tracking Dashboard
+  /// query in Phase 2 without a UI relabel.
+  topDevrelContentFreetext String?
+  topDevrelContentUrl      String?
+  topDevrelContentNaReason String?
+
+  twitterImpressionsOrganic    Int?
+  twitterImpressionsInfluencer Int?
+  twitterImpressionsNaReason   String?
+  topTweetUrl                  String?
+
+  blogOrganicSessions         Int?
+  blogOrganicSessionsNaReason String?
+  blogOrganicSessionsPulledAt DateTime?
+  blogOrganicSessionsSource   String?
+
+  discordActiveMembers Int?
+  discordTotalMembers  Int?
+  discordNaReason      String?
+}
+
+/// Layer 3 — watched signals, deliberately not headline KPIs (FR-14).
+model SignalNote {
+  id            String       @id @default(uuid())
+  reportId      String
+  report        WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  signalType    SignalType
+  note          String?
+  value         Float?
+  needsFollowup Boolean      @default(false)
+  naReason      String?
+  createdAt     DateTime     @default(now())
+
+  @@index([signalType])
+}
+
+/// Layer 4 — Search Console side of the search-visibility/brand-mentions story.
+model SearchVisibilityMetrics {
+  id       String       @id @default(uuid())
+  reportId String       @unique
+  report   WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  brandedImpressions Int?
+  brandedClicks      Int?
+  avgPosition        Float?
+  newTop20Queries    String[] @default([])
+  naReason           String?
+  pulledAt           DateTime?
+}
+
+/// Layer 3's organic "Organic Impressions" signal and Layer 4's paid CommunityMentions
+/// data, unified into one table per Section 11 — every row's mention_source is the
+/// explicit, always-visible lens the PRD requires (FR-33b).
+model BrandMention {
+  id       String        @id @default(uuid())
+  reportId String?
+  report   WeeklyReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  mentionSource MentionSource
+  platform      MentionPlatform
+  subreddit     String?
+  postTitle     String?
+  postUrl       String?
+  commentText   String?
+  commentUrl    String?
+  /// Null for organic entries — they have no machine-verification lifecycle.
+  /// Only `verified` counts toward weekly Paid totals (Section 5).
+  status        MentionStatus?
+  /// Thread score at verification time, not per-comment (Reddit API limitation,
+  /// Section 5 caveat) — paid/Reddit only, never rolled into an engagement KPI.
+  threadUpvotes Int?
+  needsFollowup Boolean       @default(false)
+  loggedBy      String?
+  postedDate    DateTime
+  sourceMethod  MentionSourceMethod
+  brand         Brand?
+  /// Dedup key across repeated Slack polls / re-uploaded CSVs — derived from
+  /// stable source fields (see src/lib/mentions/csvParser.ts), not a UI concept.
+  externalId    String?       @unique
+  createdAt     DateTime      @default(now())
+
+  @@index([mentionSource])
+  @@index([platform])
+  @@index([postedDate])
+  @@index([status])
+}
+
+/// Auto-detected flags from the Intervention Trigger Engine (FR-17). Informational,
+/// never blocks publish (FR-20) — but a flag with no linked decision is meant to be
+/// visibly incomplete in the UI (Section 9.6), not silently skippable.
+model InterventionFlag {
+  id               String       @id @default(uuid())
+  reportId         String
+  report           WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  triggerType      TriggerType
+  autoDetected     Boolean      @default(true)
+  description      String
+  resolvedAction   String?
+  linkedDecisionId String?
+  createdAt        DateTime     @default(now())
+
+  @@index([triggerType])
+}
+
+/// The decision-quality bar (FR-21/22/23) — self-certified, not AI-graded.
+model Decision {
+  id            String       @id @default(uuid())
+  reportId      String
+  report        WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  text          String
+  isSpecific    Boolean      @default(false)
+  isTimeBound   Boolean      @default(false)
+  isFalsifiable Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+}
+
+/// Every threshold the trigger engine reads is editable config, never hardcoded
+/// (FR-19) — seeded with the PRD's own stated defaults, see prisma/seed.ts.
+model TriggerConfig {
+  key         String   @id
+  value       Float
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+/// Singleton settings row: the activation event definition (FR-6a — locked once,
+/// requires explicit confirm-to-change, matching "define once, do not change it")
+/// and the branded query term list used to filter Search Console (Open Question #9).
+model AppSettings {
+  id                      String    @id @default("singleton")
+  /// Section 9.1: "define once, document, don't rename" applies to the whole event
+  /// taxonomy, not just activation — so this is locked the same way as below.
+  signupEventName         String?
+  activationEventName     String?
+  activationEventLockedAt DateTime?
+  brandedQueryTerms       String[]  @default([])
+  updatedAt               DateTime  @updatedAt
+}
+
+/// Slack watermark for the CommunityMentions ingestion channel — separate from any
+/// future content-ingestion cursor, since this tracker polls a different channel
+/// than the Content Tracking Dashboard's.
+model MentionsIngestionCursor {
+  id           String   @id @default("singleton")
+  lastSyncedTs String?
+  updatedAt    DateTime @updatedAt
+}

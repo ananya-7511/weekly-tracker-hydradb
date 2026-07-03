@@ -1,0 +1,55 @@
+{
+  "name": "weekly-gtm-analytics-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset",
+    "db:studio": "prisma studio",
+    "ingest:mentions": "tsx scripts/ingestMentions.ts",
+    "pull:weekly": "tsx scripts/pullWeekly.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@headlessui/react": "^2.2.10",
+    "@prisma/client": "^5.22.0",
+    "@tanstack/react-table": "^8.21.3",
+    "@tremor/react": "^3.18.7",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "googleapis": "^144.0.0",
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tailwind-variants": "^3.2.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@headlessui/tailwindcss": "^0.2.2",
+    "@types/node": "^20",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitest/ui": "^4.1.9",
+    "autoprefixer": "^10.5.2",
+    "dotenv": "^17.4.2",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.35",
+    "postcss": "^8.5.16",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.22.5",
+    "typescript": "^5",
+    "vitest": "^4.1.9"
+  }
+}

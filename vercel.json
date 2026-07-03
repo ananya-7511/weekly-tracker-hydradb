@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/weekly-pull", "schedule": "0 13 * * 1" },
+    { "path": "/api/cron/mentions-ingest", "schedule": "0 6 * * *" }
+  ]
+}
