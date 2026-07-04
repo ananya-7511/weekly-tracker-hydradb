@@ -168,10 +168,14 @@ Content Tracking Dashboard).
    ```
 2. **Supabase**: create a new project → **Project Settings → Database** → copy the pooled
    connection string (port 6543, `?pgbouncer=true`) into `DATABASE_URL` and the direct
-   connection string (port 5432) into `DIRECT_URL`. Run migrations against the direct URL:
+   connection string (port 5432) into `DIRECT_URL`. Run migrations against the direct URL
+   once to initialize:
    ```bash
    npx prisma migrate deploy
    ```
+   After that, no manual migration step is needed again — `npm run build` runs
+   `prisma migrate deploy && next build`, so every future Vercel deploy applies any new
+   migrations automatically before building.
 3. **Vercel**: **Add New Project** → import the new GitHub repo. Paste in all the env vars
    from `.env.example` that you have values for (blank is fine — same mock-mode fallback
    as local). `vercel.json` already defines both Cron Jobs (weekly metrics pull, daily
