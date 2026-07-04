@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   TRIGGER_CONFIG_DEFAULTS,
   detectSignupsDown,
-  detectLowActivation,
   detectChannelDominance,
   detectChannelZeroStreak,
   detectBlogGrowing,
@@ -15,38 +14,16 @@ const d = (isoDate: string) => new Date(isoDate);
 
 describe("detectSignupsDown", () => {
   it("flags a negative WoW growth", () => {
-    const result = detectSignupsDown([
-      { weekStartDate: d("2026-06-01"), newSignups: 50, activationRate: 0.3, wowSignupGrowthPct: -12.5 },
-    ]);
+    const result = detectSignupsDown([{ weekStartDate: d("2026-06-01"), newSignups: 50, wowSignupGrowthPct: -12.5 }]);
     expect(result).toHaveLength(1);
     expect(result[0].triggerType).toBe("signups_down");
   });
 
   it("does not flag positive growth or a null (not-yet-pulled) week", () => {
+    expect(detectSignupsDown([{ weekStartDate: d("2026-06-01"), newSignups: 50, wowSignupGrowthPct: 5 }])).toHaveLength(0);
     expect(
-      detectSignupsDown([{ weekStartDate: d("2026-06-01"), newSignups: 50, activationRate: 0.3, wowSignupGrowthPct: 5 }])
+      detectSignupsDown([{ weekStartDate: d("2026-06-01"), newSignups: null, wowSignupGrowthPct: null }])
     ).toHaveLength(0);
-    expect(
-      detectSignupsDown([{ weekStartDate: d("2026-06-01"), newSignups: null, activationRate: null, wowSignupGrowthPct: null }])
-    ).toHaveLength(0);
-  });
-});
-
-describe("detectLowActivation", () => {
-  it("flags activation rate below the configured floor", () => {
-    const result = detectLowActivation(
-      [{ weekStartDate: d("2026-06-01"), newSignups: 50, activationRate: 0.15, wowSignupGrowthPct: 5 }],
-      TRIGGER_CONFIG_DEFAULTS
-    );
-    expect(result).toHaveLength(1);
-  });
-
-  it("does not flag activation rate at or above the floor", () => {
-    const result = detectLowActivation(
-      [{ weekStartDate: d("2026-06-01"), newSignups: 50, activationRate: 0.2, wowSignupGrowthPct: 5 }],
-      TRIGGER_CONFIG_DEFAULTS
-    );
-    expect(result).toHaveLength(0);
   });
 });
 

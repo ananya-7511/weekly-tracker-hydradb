@@ -131,7 +131,10 @@ export default async function ReportPage({ params }: { params: { week: string } 
 
       <Card>
         <Title>Layer 1 — Outcome Metrics</Title>
-        <Text className="mt-1">Target: ≥30% activation rate (below 20% is a product problem, not GTM). Positive, consistent WoW growth.</Text>
+        <Text className="mt-1">
+          Primary Conversion Rate — out of total unique website visitors this week, how many completed sign up.
+          Positive, consistent WoW growth. (Activation Rate removed for now — revisit later.)
+        </Text>
         <form action={saveOutcome} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <NaField
             label="New Signups"
@@ -145,16 +148,19 @@ export default async function ReportPage({ params }: { params: { week: string } 
             }
           />
           <NaField
-            label="Activated Users"
-            name="activatedUsers"
-            defaultValue={report.outcomeMetrics?.activatedUsers ?? null}
-            naDefaultValue={report.outcomeMetrics?.activatedUsersNaReason ?? null}
+            label="Total Unique Website Visitors"
+            name="totalUniqueVisitors"
+            defaultValue={report.outcomeMetrics?.totalUniqueVisitors ?? null}
+            naDefaultValue={report.outcomeMetrics?.totalUniqueVisitorsNaReason ?? null}
             sourceCaption={
-              report.outcomeMetrics?.activatedUsersPulledAt ? `pulled ${relativeTime(report.outcomeMetrics.activatedUsersPulledAt)}` : undefined
+              report.outcomeMetrics?.totalUniqueVisitorsPulledAt
+                ? `pulled ${relativeTime(report.outcomeMetrics.totalUniqueVisitorsPulledAt)}`
+                : undefined
             }
           />
           <div className="sm:col-span-2 text-tremor-default text-tremor-content">
-            Activation Rate: <strong>{report.outcomeMetrics?.activationRate != null ? `${(report.outcomeMetrics.activationRate * 100).toFixed(1)}%` : "—"}</strong>
+            Primary Conversion Rate:{" "}
+            <strong>{report.outcomeMetrics?.primaryConversionRatePct != null ? `${report.outcomeMetrics.primaryConversionRatePct.toFixed(1)}%` : "—"}</strong>
             {"  ·  "}
             WoW Growth: <strong>{report.outcomeMetrics?.wowSignupGrowthPct != null ? `${report.outcomeMetrics.wowSignupGrowthPct.toFixed(1)}%` : "—"}</strong>
             {" "}(computed automatically, never re-entered by hand — FR-7)

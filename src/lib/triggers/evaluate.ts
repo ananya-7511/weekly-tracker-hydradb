@@ -8,7 +8,6 @@
 
 export type TriggerTypeValue =
   | "signups_down"
-  | "low_activation"
   | "channel_dominant"
   | "channel_zero_streak"
   | "blog_growing"
@@ -22,7 +21,6 @@ export interface DetectedTrigger {
 }
 
 export interface TriggerConfigMap {
-  activation_floor_pct: number;
   channel_dominance_pct: number;
   zero_streak_weeks: number;
   mentions_search_lookback_days: number;
@@ -31,7 +29,6 @@ export interface TriggerConfigMap {
 }
 
 export const TRIGGER_CONFIG_DEFAULTS: TriggerConfigMap = {
-  activation_floor_pct: 20,
   channel_dominance_pct: 50,
   zero_streak_weeks: 3,
   mentions_search_lookback_days: 60,
@@ -42,7 +39,6 @@ export const TRIGGER_CONFIG_DEFAULTS: TriggerConfigMap = {
 export interface OutcomeSnapshot {
   weekStartDate: Date;
   newSignups: number | null;
-  activationRate: number | null;
   wowSignupGrowthPct: number | null;
 }
 
@@ -56,23 +52,6 @@ export function detectSignupsDown(history: OutcomeSnapshot[]): DetectedTrigger[]
       {
         triggerType: "signups_down",
         description: `Signups were down ${Math.abs(current.wowSignupGrowthPct).toFixed(1)}% week-over-week — identify which channel dropped and whether there was a content or product gap.`,
-      },
-    ];
-  }
-  return [];
-}
-
-/// Activation rate <20% — "flag to product with the specific PostHog drop-off
-/// point, not a GTM fix" (Section 5). activationRate is stored as a 0-1 fraction.
-export function detectLowActivation(history: OutcomeSnapshot[], config: TriggerConfigMap): DetectedTrigger[] {
-  const current = history[history.length - 1];
-  if (!current || current.activationRate === null) return [];
-  const pct = current.activationRate * 100;
-  if (pct < config.activation_floor_pct) {
-    return [
-      {
-        triggerType: "low_activation",
-        description: `Activation rate was ${pct.toFixed(1)}%, below the ${config.activation_floor_pct}% floor — this is a product problem, not a GTM one. Flag to product with the specific PostHog drop-off point.`,
       },
     ];
   }

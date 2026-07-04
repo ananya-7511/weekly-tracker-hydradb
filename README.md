@@ -53,12 +53,17 @@ No credentials are required to explore the app — every integration runs in moc
 - **Weekly report lifecycle** (`draft` → `ready_for_decisions` → `published`) with
   no-silent-blanks enforcement at the schema and server-action layer, not just the UI
   (`src/lib/reportLifecycle.ts`) — every metric is a `(value, N/A reason)` pair.
-- **Outcome metrics** (Layer 1) auto-pulled from PostHog's HogQL Query API: New Signups,
-  Activated Users, Activation Rate, WoW Signup Growth (`src/lib/posthog.ts`,
-  `src/lib/metrics/pullMetrics.ts`).
+- **Outcome metrics** (Layer 1) auto-pulled from PostHog's HogQL Query API: New Signups
+  (a $pageview reaching the configured sign-up page path, e.g. `/sign-up` — not a custom
+  event), Total Unique Website Visitors, and the computed Primary Conversion Rate ("out of
+  total unique visitors this week, how many completed sign up"), plus WoW Signup Growth
+  (`src/lib/posthog.ts`, `src/lib/metrics/pullMetrics.ts`). Activation Rate was removed
+  from this layer for now — revisit later; the underlying `activationEventName` setting is
+  kept dormant on `/settings` so re-enabling it doesn't require re-deriving that config.
 - **Sign-Ups by Channel** (Layer 2), grouped by `$initial_utm_source` (not the per-event
-  value — Section 9.2's attribution warning). A channel that drops to zero this week gets
-  an explicit `0` row instead of disappearing, so the 3-week zero-streak trigger can see it.
+  value — Section 9.2's attribution warning), same pageview-based signup definition as
+  above. A channel that drops to zero this week gets an explicit `0` row instead of
+  disappearing, so the 3-week zero-streak trigger can see it.
 - **Blog Organic Sessions** auto-pulled from PostHog (`/blog/*`, no-initial-UTM proxy).
 - **Manual, guided entry** for Twitter Impressions (organic/influencer split), Discord
   Active/Total Members, **Top DevRel Content Piece** (freetext + link, explicitly labeled
@@ -144,10 +149,11 @@ real signups data, not a duplicate.
 4. Set the branded query term list on `/settings` (Open Question #9) — Search Visibility
    metrics stay unavailable until at least one term is configured.
 
-### 4. Activation event (Open Question #1)
-Confirm the exact PostHog event name that constitutes "activated" (e.g., "connected a
-database") and lock it on `/settings` before relying on Activation Rate — this gates
-FR-6/FR-7 and the low-activation trigger.
+### 4. Sign-up page path
+Confirm the exact page path a successful sign-up lands a visitor on (default `/sign-up`)
+and set it on `/settings` — New Signups, Sign-Ups by Channel, and Primary Conversion Rate
+all key off it. (The Activation Event setting on the same page is dormant for now —
+Outcome-layer Activation Rate was removed, revisit later.)
 
 ## Deploying to Supabase + Vercel
 

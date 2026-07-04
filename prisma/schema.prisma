@@ -63,7 +63,6 @@ enum Brand {
 
 enum TriggerType {
   signups_down
-  low_activation
   channel_dominant
   channel_zero_streak
   blog_growing
@@ -108,12 +107,16 @@ model OutcomeMetrics {
   newSignupsPulledAt  DateTime?
   newSignupsSource    String?
 
-  activatedUsers         Int?
-  activatedUsersNaReason String?
-  activatedUsersPulledAt DateTime?
+  /// Anyone who visited the site (any $pageview) in the window — the
+  /// denominator for Primary Conversion Rate. Activation Rate was dropped for
+  /// now (revisit later); this replaces it as the Outcome-layer rate metric.
+  totalUniqueVisitors         Int?
+  totalUniqueVisitorsNaReason String?
+  totalUniqueVisitorsPulledAt DateTime?
 
-  /// Computed = activatedUsers / newSignups, never re-entered by hand (FR-7).
-  activationRate      Float?
+  /// Computed = newSignups / totalUniqueVisitors, never re-entered by hand —
+  /// "out of total unique visitors in the window, how many completed sign up."
+  primaryConversionRatePct Float?
   /// Computed = this week's newSignups / prior week's, as a percentage (FR-7).
   wowSignupGrowthPct  Float?
 }
@@ -270,9 +273,12 @@ model TriggerConfig {
 /// and the branded query term list used to filter Search Console (Open Question #9).
 model AppSettings {
   id                      String    @id @default("singleton")
-  /// Section 9.1: "define once, document, don't rename" applies to the whole event
-  /// taxonomy, not just activation — so this is locked the same way as below.
-  signupEventName         String?
+  /// A signup is now defined as a $pageview at this path (Section 9.1's "define
+  /// once, document, don't rename" still applies) rather than a custom event —
+  /// whoever lands here successfully is counted as signed up.
+  signupPagePath          String?
+  /// Dormant for now (Outcome-layer Activation Rate was removed, revisit later)
+  /// but kept so re-enabling it later doesn't require re-deriving this setting.
   activationEventName     String?
   activationEventLockedAt DateTime?
   brandedQueryTerms       String[]  @default([])

@@ -40,54 +40,61 @@ export async function pullAllAutomatedMetrics(reportId: string): Promise<PullSum
     searchVisibility: "unavailable",
   };
 
-  // --- Outcome metrics (FR-5/6/7) ---
-  const signupsResult = await posthog.fetchTotalSignups(weekStart, weekEnd, settings.signupEventName);
-  if (signupsResult.available) {
+  // --- Outcome metrics (FR-5/7): New Signups (pageview at the signup page path),
+  // Total Unique Website Visitors, and the Primary Conversion Rate computed from
+  // them ("out of total unique visitors this week, how many completed sign up").
+  const signupsResult = await posthog.fetchTotalSignups(weekStart, weekEnd, settings.signupPagePath);
+  const visitorsResult = await posthog.fetchTotalUniqueVisitors(weekStart, weekEnd);
+  if (signupsResult.available || visitorsResult.available) {
+    const existingOutcome = await prisma.outcomeMetrics.findUnique({ where: { reportId } });
+    const newSignups = signupsResult.available ? signupsResult.data.count : existingOutcome?.newSignups ?? null;
+    const totalUniqueVisitors = visitorsResult.available
+      ? visitorsResult.data.count
+      : existingOutcome?.totalUniqueVisitors ?? null;
+
     const priorOutcome = await prisma.outcomeMetrics.findFirst({
       where: { report: { weekStartDate: priorStart } },
       select: { newSignups: true },
     });
-    let activatedUsers: number | null = null;
-    let activatedPulledAt: Date | null = null;
-    if (settings.activationEventName) {
-      const activation = await posthog.fetchActivationFunnel(
-        weekStart,
-        weekEnd,
-        settings.signupEventName,
-        settings.activationEventName
-      );
-      if (activation.available) {
-        activatedUsers = activation.data.activated;
-        activatedPulledAt = activation.pulledAt;
-      }
-    }
-    const newSignups = signupsResult.data.count;
     const wowGrowth =
-      priorOutcome?.newSignups && priorOutcome.newSignups > 0
+      newSignups !== null && priorOutcome?.newSignups && priorOutcome.newSignups > 0
         ? ((newSignups - priorOutcome.newSignups) / priorOutcome.newSignups) * 100
+        : null;
+    const primaryConversionRatePct =
+      newSignups !== null && totalUniqueVisitors && totalUniqueVisitors > 0
+        ? (newSignups / totalUniqueVisitors) * 100
         : null;
 
     await prisma.outcomeMetrics.upsert({
       where: { reportId },
       create: {
         reportId,
-        newSignups,
-        newSignupsPulledAt: signupsResult.pulledAt,
-        newSignupsSource: "PostHog: Weekly Signups by Source",
-        activatedUsers,
-        activatedUsersPulledAt: activatedPulledAt,
-        activationRate: activatedUsers !== null && newSignups > 0 ? activatedUsers / newSignups : null,
+        ...(signupsResult.available
+          ? { newSignups: signupsResult.data.count, newSignupsPulledAt: signupsResult.pulledAt, newSignupsSource: "PostHog: sign-up page visits" }
+          : {}),
+        ...(visitorsResult.available
+          ? { totalUniqueVisitors: visitorsResult.data.count, totalUniqueVisitorsPulledAt: visitorsResult.pulledAt }
+          : {}),
+        primaryConversionRatePct,
         wowSignupGrowthPct: wowGrowth,
       },
       update: {
-        newSignups,
-        newSignupsNaReason: null,
-        newSignupsPulledAt: signupsResult.pulledAt,
-        newSignupsSource: "PostHog: Weekly Signups by Source",
-        ...(activatedUsers !== null
-          ? { activatedUsers, activatedUsersNaReason: null, activatedUsersPulledAt: activatedPulledAt }
+        ...(signupsResult.available
+          ? {
+              newSignups: signupsResult.data.count,
+              newSignupsNaReason: null,
+              newSignupsPulledAt: signupsResult.pulledAt,
+              newSignupsSource: "PostHog: sign-up page visits",
+            }
           : {}),
-        activationRate: activatedUsers !== null && newSignups > 0 ? activatedUsers / newSignups : undefined,
+        ...(visitorsResult.available
+          ? {
+              totalUniqueVisitors: visitorsResult.data.count,
+              totalUniqueVisitorsNaReason: null,
+              totalUniqueVisitorsPulledAt: visitorsResult.pulledAt,
+            }
+          : {}),
+        primaryConversionRatePct,
         wowSignupGrowthPct: wowGrowth,
       },
     });
@@ -95,7 +102,7 @@ export async function pullAllAutomatedMetrics(reportId: string): Promise<PullSum
   }
 
   // --- Sign-Ups by Channel (FR-9) ---
-  const channelResult = await posthog.fetchSignupsByChannel(weekStart, weekEnd, settings.signupEventName);
+  const channelResult = await posthog.fetchSignupsByChannel(weekStart, weekEnd, settings.signupPagePath);
   if (channelResult.available) {
     const knownChannels = await getKnownChannels();
     const pulled = new Map(channelResult.data.bySource.map((c) => [c.utmSource, c.signups]));

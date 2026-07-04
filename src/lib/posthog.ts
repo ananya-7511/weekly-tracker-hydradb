@@ -50,17 +50,20 @@ export type PullResult<T> = AvailableResult<T> | UnavailableResult;
 
 /// Sign-Ups by Channel (FR-9) — grouped by the *initial* UTM source person property,
 /// per Section 9.2: initial attribution is the channel that brought the person in,
-/// not whichever channel they happened to touch most recently.
+/// not whichever channel they happened to touch most recently. A signup is a
+/// $pageview reaching the configured signup page path (e.g. "/sign-up"), not a
+/// custom event — counted per distinct person since one person can reload/revisit
+/// that page more than once.
 export async function fetchSignupsByChannel(
   weekStart: Date,
   weekEnd: Date,
-  signupEventName: string
+  signupPagePath: string
 ): Promise<PullResult<{ bySource: Array<{ utmSource: string; signups: number }>; total: number }>> {
   const { from, to } = isoRange(weekStart, weekEnd);
   const query = `
-    SELECT coalesce(person.properties.$initial_utm_source, 'direct/unknown') AS utm_source, count() AS signups
+    SELECT coalesce(person.properties.$initial_utm_source, 'direct/unknown') AS utm_source, count(DISTINCT person_id) AS signups
     FROM events
-    WHERE event = '${escapeHogQLString(signupEventName)}'
+    WHERE event = '$pageview' AND properties.$pathname = '${escapeHogQLString(signupPagePath)}'
       AND timestamp >= toDateTime('${from}') AND timestamp <= toDateTime('${to}')
     GROUP BY utm_source
     ORDER BY signups DESC
@@ -72,16 +75,18 @@ export async function fetchSignupsByChannel(
   return { available: true, pulledAt: new Date(), data: { bySource, total } };
 }
 
-/// New Signups (FR-5) — total count of the signup event in the window.
+/// New Signups (FR-5) — distinct persons who reached the signup page path in
+/// the window. Redefined from a custom "signed up" event to a pageview-based
+/// success-page hit, since that's what reliably fires today.
 export async function fetchTotalSignups(
   weekStart: Date,
   weekEnd: Date,
-  signupEventName: string
+  signupPagePath: string
 ): Promise<PullResult<{ count: number }>> {
   const { from, to } = isoRange(weekStart, weekEnd);
   const query = `
-    SELECT count() FROM events
-    WHERE event = '${escapeHogQLString(signupEventName)}'
+    SELECT count(DISTINCT person_id) FROM events
+    WHERE event = '$pageview' AND properties.$pathname = '${escapeHogQLString(signupPagePath)}'
       AND timestamp >= toDateTime('${from}') AND timestamp <= toDateTime('${to}')
   `;
   const result = await runHogQL(query);
@@ -90,37 +95,23 @@ export async function fetchTotalSignups(
   return { available: true, pulledAt: new Date(), data: { count } };
 }
 
-/// Activated Users (FR-6/FR-7) — signups in the window who also fired the
-/// admin-locked activation event within a 7-day conversion window (Section 9.3,
-/// Open Question #6's default assumption).
-export async function fetchActivationFunnel(
+/// Total Unique Website Visitors — anyone with at least one $pageview in the
+/// window, regardless of path. The denominator for Primary Conversion Rate
+/// ("out of total unique visitors, how many completed sign up").
+export async function fetchTotalUniqueVisitors(
   weekStart: Date,
-  weekEnd: Date,
-  signupEventName: string,
-  activationEventName: string
-): Promise<PullResult<{ signups: number; activated: number }>> {
+  weekEnd: Date
+): Promise<PullResult<{ count: number }>> {
   const { from, to } = isoRange(weekStart, weekEnd);
-  const signupEsc = escapeHogQLString(signupEventName);
-  const activationEsc = escapeHogQLString(activationEventName);
   const query = `
-    SELECT
-      count(DISTINCT signup.person_id) AS signups,
-      count(DISTINCT activation.person_id) AS activated
-    FROM (
-      SELECT person_id, timestamp FROM events
-      WHERE event = '${signupEsc}' AND timestamp >= toDateTime('${from}') AND timestamp <= toDateTime('${to}')
-    ) AS signup
-    LEFT JOIN (
-      SELECT person_id, timestamp FROM events WHERE event = '${activationEsc}'
-    ) AS activation
-    ON signup.person_id = activation.person_id
-      AND activation.timestamp >= signup.timestamp
-      AND activation.timestamp <= signup.timestamp + INTERVAL 7 DAY
+    SELECT count(DISTINCT person_id) FROM events
+    WHERE event = '$pageview'
+      AND timestamp >= toDateTime('${from}') AND timestamp <= toDateTime('${to}')
   `;
   const result = await runHogQL(query);
   if (!result) return { available: false };
-  const [signups, activated] = result.results[0] ?? [0, 0];
-  return { available: true, pulledAt: new Date(), data: { signups: Number(signups), activated: Number(activated) } };
+  const count = Number(result.results[0]?.[0] ?? 0);
+  return { available: true, pulledAt: new Date(), data: { count } };
 }
 
 /// Blog Organic Sessions (FR-12) — $pageview on /blog/* with no initial UTM source
@@ -143,33 +134,4 @@ export async function fetchBlogOrganicSessions(
   if (!result) return { available: false };
   const sessions = Number(result.results[0]?.[0] ?? 0);
   return { available: true, pulledAt: new Date(), data: { sessions } };
-}
-
-/// Churned/Inactive Sign-Ups (FR-15) — signed up in the window, never fired the
-/// activation event at all (Section 9.3's "performed X but not Y" cohort logic).
-export async function fetchChurnedInactive(
-  weekStart: Date,
-  weekEnd: Date,
-  signupEventName: string,
-  activationEventName: string
-): Promise<PullResult<{ count: number }>> {
-  const { from, to } = isoRange(weekStart, weekEnd);
-  const signupEsc = escapeHogQLString(signupEventName);
-  const activationEsc = escapeHogQLString(activationEventName);
-  const query = `
-    SELECT count(DISTINCT signup.person_id) FROM (
-      SELECT person_id, timestamp FROM events
-      WHERE event = '${signupEsc}' AND timestamp >= toDateTime('${from}') AND timestamp <= toDateTime('${to}')
-    ) AS signup
-    WHERE NOT EXISTS (
-      SELECT 1 FROM events AS activation
-      WHERE activation.event = '${activationEsc}'
-        AND activation.person_id = signup.person_id
-        AND activation.timestamp >= signup.timestamp
-    )
-  `;
-  const result = await runHogQL(query);
-  if (!result) return { available: false };
-  const count = Number(result.results[0]?.[0] ?? 0);
-  return { available: true, pulledAt: new Date(), data: { count } };
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, Title, Text, AreaChart, LineChart, BarChart } from "@tremor/react";
 import { getTrendData } from "@/lib/data/trendQueries";
 import { listReportWeeks } from "@/lib/data/reportQueries";
-import { ActivationRateChart } from "./ActivationRateChart";
+import { ConversionRateChart } from "./ConversionRateChart";
 
 // This page queries live report history on every request — it must never be
 // statically prerendered at build time (Vercel's build step has no business
@@ -23,7 +23,7 @@ export default async function TrendsPage() {
       </Text>
 
       <Card>
-        <Title>New Signups &amp; Activation Rate</Title>
+        <Title>New Signups &amp; Primary Conversion Rate</Title>
         <AreaChart
           className="mt-4 h-64"
           data={points}
@@ -32,7 +32,7 @@ export default async function TrendsPage() {
           colors={["blue"]}
           connectNulls
         />
-        <ActivationRateChart data={points} />
+        <ConversionRateChart data={points} />
       </Card>
 
       <Card>

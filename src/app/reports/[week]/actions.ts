@@ -36,17 +36,17 @@ export async function pullMetricsAction(reportId: string, weekStartIso: string) 
 export async function saveOutcomeMetrics(reportId: string, weekStartIso: string, formData: FormData) {
   const newSignups = numOrNull(formData, "newSignups");
   const newSignupsNaReason = strOrNull(formData, "newSignupsNaReason");
-  const activatedUsers = numOrNull(formData, "activatedUsers");
-  const activatedUsersNaReason = strOrNull(formData, "activatedUsersNaReason");
+  const totalUniqueVisitors = numOrNull(formData, "totalUniqueVisitors");
+  const totalUniqueVisitorsNaReason = strOrNull(formData, "totalUniqueVisitorsNaReason");
 
   await prisma.outcomeMetrics.update({
     where: { reportId },
     data: {
       newSignups,
       newSignupsNaReason: newSignups === null ? newSignupsNaReason : null,
-      activatedUsers,
-      activatedUsersNaReason: activatedUsers === null ? activatedUsersNaReason : null,
-      activationRate: newSignups && activatedUsers !== null ? activatedUsers / newSignups : null,
+      totalUniqueVisitors,
+      totalUniqueVisitorsNaReason: totalUniqueVisitors === null ? totalUniqueVisitorsNaReason : null,
+      primaryConversionRatePct: newSignups !== null && totalUniqueVisitors ? (newSignups / totalUniqueVisitors) * 100 : null,
     },
   });
   await evaluateTriggersForReport(reportId);

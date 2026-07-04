@@ -7,7 +7,7 @@ import { getWeeklyMentionsAggregates, mentionsWeekKey } from "@/lib/data/mention
 export interface TrendPoint {
   week: string;
   newSignups: number | null;
-  activationRatePct: number | null;
+  primaryConversionRatePct: number | null;
   blogOrganicSessions: number | null;
   brandedImpressions: number | null;
   paidMentions: number;
@@ -42,7 +42,7 @@ export async function getTrendData(): Promise<TrendData> {
     return {
       week: formatWeekLabel(r.weekStartDate),
       newSignups: r.outcomeMetrics?.newSignups ?? null,
-      activationRatePct: r.outcomeMetrics?.activationRate != null ? r.outcomeMetrics.activationRate * 100 : null,
+      primaryConversionRatePct: r.outcomeMetrics?.primaryConversionRatePct ?? null,
       blogOrganicSessions: r.weeklyExtras?.blogOrganicSessions ?? null,
       brandedImpressions: r.searchVisibility?.brandedImpressions ?? null,
       paidMentions,

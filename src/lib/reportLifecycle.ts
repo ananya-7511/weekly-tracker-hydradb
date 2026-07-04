@@ -10,8 +10,8 @@ function isFilled(value: unknown, naReason: string | null | undefined): boolean 
 export interface OutcomeMetricsLike {
   newSignups: number | null;
   newSignupsNaReason: string | null;
-  activatedUsers: number | null;
-  activatedUsersNaReason: string | null;
+  totalUniqueVisitors: number | null;
+  totalUniqueVisitorsNaReason: string | null;
 }
 
 export interface ChannelMetricsLike {
@@ -61,7 +61,7 @@ export function findMissingFields(report: ReportForLifecycleCheck): string[] {
 
   const om = report.outcomeMetrics;
   if (!om || !isFilled(om.newSignups, om.newSignupsNaReason)) missing.push("New Signups");
-  if (!om || !isFilled(om.activatedUsers, om.activatedUsersNaReason)) missing.push("Activated Users");
+  if (!om || !isFilled(om.totalUniqueVisitors, om.totalUniqueVisitorsNaReason)) missing.push("Total Unique Website Visitors");
 
   for (const ch of report.channelMetrics) {
     if (!isFilled(ch.signups, ch.naReason)) missing.push(`Sign-Ups by Channel: ${ch.utmSource}`);

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { confirmActivationEvent, setSignupEventName, setBrandedQueryTerms } from "@/lib/settings";
+import { confirmActivationEvent, setSignupPagePath, setBrandedQueryTerms } from "@/lib/settings";
 import { TRIGGER_CONFIG_DEFAULTS } from "@/lib/triggers/evaluate";
 
 const CONFIG_KEYS = Object.keys(TRIGGER_CONFIG_DEFAULTS);
@@ -47,10 +47,10 @@ export async function confirmActivationEventAction(formData: FormData) {
   );
 }
 
-export async function updateSignupEventNameAction(formData: FormData) {
-  const eventName = String(formData.get("signupEventName") ?? "").trim();
-  if (!eventName) return;
-  await setSignupEventName(eventName);
+export async function updateSignupPagePathAction(formData: FormData) {
+  const pagePath = String(formData.get("signupPagePath") ?? "").trim();
+  if (!pagePath) return;
+  await setSignupPagePath(pagePath);
   revalidatePath("/settings");
 }
 

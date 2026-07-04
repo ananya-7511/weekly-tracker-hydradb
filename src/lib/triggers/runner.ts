@@ -8,7 +8,6 @@ import { getWeeklyMentionsAggregates, mentionsWeekKey } from "@/lib/data/mention
 import {
   TRIGGER_CONFIG_DEFAULTS,
   detectSignupsDown,
-  detectLowActivation,
   detectChannelDominance,
   detectChannelZeroStreak,
   detectBlogGrowing,
@@ -63,7 +62,6 @@ export async function evaluateTriggersForReport(reportId: string): Promise<Detec
   const outcomeHistory: OutcomeSnapshot[] = history.map((r) => ({
     weekStartDate: r.weekStartDate,
     newSignups: r.outcomeMetrics?.newSignups ?? null,
-    activationRate: r.outcomeMetrics?.activationRate ?? null,
     wowSignupGrowthPct: r.outcomeMetrics?.wowSignupGrowthPct ?? null,
   }));
 
@@ -106,7 +104,6 @@ export async function evaluateTriggersForReport(reportId: string): Promise<Detec
 
   const detected: DetectedTrigger[] = [
     ...detectSignupsDown(outcomeHistory),
-    ...detectLowActivation(outcomeHistory, config),
     ...detectChannelDominance(currentWeekChannels, config),
     ...detectChannelZeroStreak(channelHistory, config),
     ...detectBlogGrowing(blogHistory),

@@ -3,13 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { getAppSettings } from "@/lib/settings";
 import { TRIGGER_CONFIG_DEFAULTS } from "@/lib/triggers/evaluate";
 import { ActivationEventForm } from "./ActivationEventForm";
-import { updateTriggerConfig, updateSignupEventNameAction, updateBrandedQueryTermsAction } from "./actions";
+import { updateTriggerConfig, updateSignupPagePathAction, updateBrandedQueryTermsAction } from "./actions";
 
 // Live config reads/writes — must never be statically prerendered at build time.
 export const dynamic = "force-dynamic";
 
 const CONFIG_LABELS: Record<string, string> = {
-  activation_floor_pct: "Activation floor (%) — below this, flag to product",
   channel_dominance_pct: "Channel dominance (%) — a channel above this share triggers 'double down'",
   zero_streak_weeks: "Zero-streak weeks — consecutive weeks at zero before flagging a channel to pause",
   mentions_search_lookback_days: "Mentions-vs-search lookback (days)",
@@ -37,12 +36,17 @@ export default async function SettingsPage({
 
       <Card>
         <Title>Event Taxonomy (Section 9.1)</Title>
-        <form action={updateSignupEventNameAction} className="mt-4 flex flex-col gap-2">
-          <label className="text-tremor-default font-medium text-tremor-content-emphasis">Signup Event Name</label>
+        <form action={updateSignupPagePathAction} className="mt-4 flex flex-col gap-2">
+          <label className="text-tremor-default font-medium text-tremor-content-emphasis">Sign-Up Page Path</label>
+          <Text>
+            A signup is counted whenever a visitor successfully reaches this page path (e.g. a post-signup
+            confirmation page) — not a custom PostHog event.
+          </Text>
           <input
             type="text"
-            name="signupEventName"
-            defaultValue={settings.signupEventName}
+            name="signupPagePath"
+            defaultValue={settings.signupPagePath}
+            placeholder="/sign-up"
             className="rounded-tremor-default border border-tremor-border px-2 py-1 text-tremor-default"
           />
           <button type="submit" className="w-fit rounded-tremor-default border border-tremor-border px-3 py-1.5 text-tremor-default">

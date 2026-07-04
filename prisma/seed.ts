@@ -10,11 +10,10 @@ function rand(seed: number, min: number, max: number): number {
 }
 
 const CHANNELS = ["twitter", "blog", "discord", "reddit-ads", "direct/unknown"];
-const SIGNUP_EVENT = "user signed up";
+const SIGNUP_PAGE_PATH = "/sign-up";
 const ACTIVATION_EVENT = "connected a database";
 
 const TRIGGER_CONFIG_DEFAULTS: Array<{ key: string; value: number; description: string }> = [
-  { key: "activation_floor_pct", value: 20, description: "Below this activation rate, flag to product (Section 5)." },
   { key: "channel_dominance_pct", value: 50, description: "A channel above this share of total signups triggers 'double down' (FR-19 placeholder default — confirm, Open Question #3)." },
   { key: "zero_streak_weeks", value: 3, description: "Consecutive weeks a channel is at zero before flagging 'pause it.'" },
   { key: "mentions_search_lookback_days", value: 60, description: "Lookback for 'paid mentions rising but branded search flat' (matches the agency's own stated timeframe)." },
@@ -32,12 +31,13 @@ async function main() {
     });
   }
 
-  console.log("Seeding AppSettings (locked activation event)...");
+  console.log("Seeding AppSettings...");
   await prisma.appSettings.upsert({
     where: { id: "singleton" },
     create: {
       id: "singleton",
-      signupEventName: SIGNUP_EVENT,
+      signupPagePath: SIGNUP_PAGE_PATH,
+      // Dormant for now (Outcome-layer Activation Rate was removed, revisit later).
       activationEventName: ACTIVATION_EVENT,
       activationEventLockedAt: new Date(),
       brandedQueryTerms: ["hydradb", "hydra db", "hydra-db"],
@@ -68,11 +68,9 @@ async function main() {
     const baseSignups = Math.round(40 * Math.pow(1.12, weekIndex) + rand(seed, -3, 4));
     const newSignups = isCurrentWeek ? null : baseSignups; // current week: not pulled yet, deliberately blank to exercise the "N/A required" gate
 
-    // Week index 3 (a past week) deliberately has a flat/low activation rate to
-    // demonstrate the <20% intervention trigger.
-    const isLowActivationWeek = weekIndex === 3;
-    const activationRatePct = isLowActivationWeek ? 15 : rand(seed, 30, 42);
-    const activatedUsers = newSignups === null ? null : Math.round((newSignups * activationRatePct) / 100);
+    // Primary Conversion Rate ~8-18% of total unique visitors completing sign up.
+    const conversionRatePct = rand(seed, 8, 18);
+    const totalUniqueVisitors = newSignups === null ? null : Math.round((newSignups / conversionRatePct) * 100);
 
     const report = await prisma.weeklyReport.create({
       data: {
@@ -90,11 +88,11 @@ async function main() {
         newSignups,
         newSignupsNaReason: newSignups === null ? "N/A — not pulled yet this week" : null,
         newSignupsPulledAt: newSignups === null ? null : new Date(),
-        newSignupsSource: newSignups === null ? null : "PostHog: Weekly Signups by Source",
-        activatedUsers,
-        activatedUsersNaReason: activatedUsers === null ? "N/A — depends on New Signups pull" : null,
-        activatedUsersPulledAt: activatedUsers === null ? null : new Date(),
-        activationRate: activatedUsers !== null && newSignups ? activatedUsers / newSignups : null,
+        newSignupsSource: newSignups === null ? null : "PostHog: sign-up page visits",
+        totalUniqueVisitors,
+        totalUniqueVisitorsNaReason: totalUniqueVisitors === null ? "N/A — not pulled yet this week" : null,
+        totalUniqueVisitorsPulledAt: totalUniqueVisitors === null ? null : new Date(),
+        primaryConversionRatePct: totalUniqueVisitors !== null && newSignups ? (newSignups / totalUniqueVisitors) * 100 : null,
         wowSignupGrowthPct: newSignups !== null && priorSignups ? ((newSignups - priorSignups) / priorSignups) * 100 : null,
       },
     });
@@ -226,13 +224,6 @@ async function main() {
 
     if (!isCurrentWeek) {
       const flags: Array<{ type: TriggerType; description: string; resolvedAction?: string }> = [];
-      if (isLowActivationWeek) {
-        flags.push({
-          type: TriggerType.low_activation,
-          description: `Activation rate was ${activationRatePct}% this week, below the 20% floor.`,
-          resolvedAction: "Flagged to product with the PostHog drop-off point on the onboarding step.",
-        });
-      }
       if (weekIndex === 6) {
         flags.push({
           type: TriggerType.channel_zero_streak,
@@ -262,9 +253,7 @@ async function main() {
           },
           {
             reportId: report.id,
-            text: isLowActivationWeek
-              ? "Ship the onboarding tooltip fix for the drop-off step by Wednesday and re-check activation rate next Monday."
-              : "Pause reddit-ads spend this week and reallocate the budget to the blog content cluster.",
+            text: "Pause reddit-ads spend this week and reallocate the budget to the blog content cluster.",
             isSpecific: true,
             isTimeBound: true,
             isFalsifiable: true,

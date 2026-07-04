@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/prisma";
 
-const DEFAULT_SIGNUP_EVENT = "user signed up";
+const DEFAULT_SIGNUP_PAGE_PATH = "/sign-up";
 
 export async function getAppSettings() {
   const settings = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
   return {
-    signupEventName: settings?.signupEventName ?? DEFAULT_SIGNUP_EVENT,
+    signupPagePath: settings?.signupPagePath ?? DEFAULT_SIGNUP_PAGE_PATH,
     activationEventName: settings?.activationEventName ?? null,
     activationEventLockedAt: settings?.activationEventLockedAt ?? null,
     brandedQueryTerms: settings?.brandedQueryTerms ?? [],
@@ -14,6 +14,7 @@ export async function getAppSettings() {
 
 /// FR-6a: the activation event is stored once and requires an explicit confirmation
 /// to change — this is the only write path, there's no plain "edit" field for it.
+/// Dormant for now (Outcome-layer Activation Rate was removed, revisit later).
 export async function confirmActivationEvent(eventName: string) {
   return prisma.appSettings.upsert({
     where: { id: "singleton" },
@@ -22,11 +23,11 @@ export async function confirmActivationEvent(eventName: string) {
   });
 }
 
-export async function setSignupEventName(eventName: string) {
+export async function setSignupPagePath(pagePath: string) {
   return prisma.appSettings.upsert({
     where: { id: "singleton" },
-    create: { id: "singleton", signupEventName: eventName },
-    update: { signupEventName: eventName },
+    create: { id: "singleton", signupPagePath: pagePath },
+    update: { signupPagePath: pagePath },
   });
 }
 

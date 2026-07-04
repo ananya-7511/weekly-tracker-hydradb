@@ -26,9 +26,9 @@ function buildSummaryLines(report: FullReport, bold: (s: string) => string): str
   lines.push("");
   lines.push(bold("Outcome"));
   lines.push(`• New Signups: ${naOr(om?.newSignups, om?.newSignupsNaReason)}`);
-  lines.push(`• Activated Users: ${naOr(om?.activatedUsers, om?.activatedUsersNaReason)}`);
+  lines.push(`• Total Unique Website Visitors: ${naOr(om?.totalUniqueVisitors, om?.totalUniqueVisitorsNaReason)}`);
   lines.push(
-    `• Activation Rate: ${om?.activationRate !== null && om?.activationRate !== undefined ? `${(om.activationRate * 100).toFixed(1)}%` : "N/A"}`
+    `• Primary Conversion Rate: ${om?.primaryConversionRatePct !== null && om?.primaryConversionRatePct !== undefined ? `${om.primaryConversionRatePct.toFixed(1)}%` : "N/A"}`
   );
   lines.push(
     `• WoW Signup Growth: ${om?.wowSignupGrowthPct !== null && om?.wowSignupGrowthPct !== undefined ? `${om.wowSignupGrowthPct.toFixed(1)}%` : "N/A"}`

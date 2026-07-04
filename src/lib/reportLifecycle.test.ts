@@ -3,7 +3,7 @@ import { findMissingFields, canMoveToReadyForDecisions, canPublish, type ReportF
 
 function completeReport(): ReportForLifecycleCheck {
   return {
-    outcomeMetrics: { newSignups: 50, newSignupsNaReason: null, activatedUsers: 15, activatedUsersNaReason: null },
+    outcomeMetrics: { newSignups: 50, newSignupsNaReason: null, totalUniqueVisitors: 300, totalUniqueVisitorsNaReason: null },
     channelMetrics: [{ utmSource: "twitter", signups: 20, naReason: null }],
     weeklyExtras: {
       topDevrelContentFreetext: "A post",
@@ -35,13 +35,13 @@ describe("findMissingFields / canMoveToReadyForDecisions", () => {
 
   it("treats an explicit N/A reason as filled, not missing", () => {
     const report = completeReport();
-    report.outcomeMetrics = { newSignups: null, newSignupsNaReason: "N/A — PostHog pull failed", activatedUsers: 15, activatedUsersNaReason: null };
+    report.outcomeMetrics = { newSignups: null, newSignupsNaReason: "N/A — PostHog pull failed", totalUniqueVisitors: 300, totalUniqueVisitorsNaReason: null };
     expect(findMissingFields(report)).toEqual([]);
   });
 
   it("flags a genuinely blank field (no value, no N/A reason)", () => {
     const report = completeReport();
-    report.outcomeMetrics = { newSignups: null, newSignupsNaReason: null, activatedUsers: 15, activatedUsersNaReason: null };
+    report.outcomeMetrics = { newSignups: null, newSignupsNaReason: null, totalUniqueVisitors: 300, totalUniqueVisitorsNaReason: null };
     const missing = findMissingFields(report);
     expect(missing).toContain("New Signups");
     expect(canMoveToReadyForDecisions(report).ok).toBe(false);
