@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mondayOf, weekEndOf } from "@/lib/dateWindow";
 
@@ -28,19 +29,33 @@ export async function getOrCreateReportForWeek(weekStart: Date) {
   });
   if (existing) return existing;
 
-  const created = await prisma.weeklyReport.create({
-    data: {
-      weekStartDate: weekStart,
-      weekEndDate: weekEndOf(weekStart),
-      status: "draft",
-      outcomeMetrics: { create: {} },
-      weeklyExtras: { create: {} },
-      searchVisibility: { create: {} },
-      signalNotes: { create: SIGNAL_TYPES.map((signalType) => ({ signalType })) },
-    },
-    include: FULL_REPORT_INCLUDE,
-  });
-  return created;
+  try {
+    return await prisma.weeklyReport.create({
+      data: {
+        weekStartDate: weekStart,
+        weekEndDate: weekEndOf(weekStart),
+        status: "draft",
+        outcomeMetrics: { create: {} },
+        weeklyExtras: { create: {} },
+        searchVisibility: { create: {} },
+        signalNotes: { create: SIGNAL_TYPES.map((signalType) => ({ signalType })) },
+      },
+      include: FULL_REPORT_INCLUDE,
+    });
+  } catch (err) {
+    // Two concurrent requests (e.g. Next.js prefetching "/" from more than one
+    // nav link at once) can both see "no report yet" and race to create one —
+    // the loser hits this unique constraint rather than a real error. Re-fetch
+    // the winner's row instead of crashing the request.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const winner = await prisma.weeklyReport.findUnique({
+        where: { weekStartDate: weekStart },
+        include: FULL_REPORT_INCLUDE,
+      });
+      if (winner) return winner;
+    }
+    throw err;
+  }
 }
 
 export async function getOrCreateCurrentWeekReport() {
