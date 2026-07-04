@@ -4,6 +4,13 @@ import { getTrendData } from "@/lib/data/trendQueries";
 import { listReportWeeks } from "@/lib/data/reportQueries";
 import { ActivationRateChart } from "./ActivationRateChart";
 
+// This page queries live report history on every request — it must never be
+// statically prerendered at build time (Vercel's build step has no business
+// baking in a snapshot of data that changes weekly, and attempting to prerender
+// it hits the database at build time, which is what caused the Vercel build
+// failure this was added to fix).
+export const dynamic = "force-dynamic";
+
 export default async function TrendsPage() {
   const [{ points, channelPoints, channelNames }, weeks] = await Promise.all([getTrendData(), listReportWeeks()]);
 

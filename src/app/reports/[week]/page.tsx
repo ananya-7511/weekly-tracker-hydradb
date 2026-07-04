@@ -11,6 +11,10 @@ import { PullButton } from "./PullButton";
 import { CopyDiscordButton } from "./CopyDiscordButton";
 import * as actions from "./actions";
 
+// Live report data, mutated constantly via the Server Actions below — must
+// never be statically prerendered or cached.
+export const dynamic = "force-dynamic";
+
 const SIGNAL_LABELS: Record<string, string> = {
   source_quality: "Sign-Up Source Quality",
   time_to_activation: "Time to Activation",

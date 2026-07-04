@@ -5,6 +5,9 @@ import { TRIGGER_CONFIG_DEFAULTS } from "@/lib/triggers/evaluate";
 import { ActivationEventForm } from "./ActivationEventForm";
 import { updateTriggerConfig, updateSignupEventNameAction, updateBrandedQueryTermsAction } from "./actions";
 
+// Live config reads/writes — must never be statically prerendered at build time.
+export const dynamic = "force-dynamic";
+
 const CONFIG_LABELS: Record<string, string> = {
   activation_floor_pct: "Activation floor (%) — below this, flag to product",
   channel_dominance_pct: "Channel dominance (%) — a channel above this share triggers 'double down'",
