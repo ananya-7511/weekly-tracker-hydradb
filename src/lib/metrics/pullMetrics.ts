@@ -8,12 +8,17 @@ import { weekEndOf, priorWeekStart } from "@/lib/dateWindow";
 import { getAppSettings } from "@/lib/settings";
 import * as posthog from "@/lib/posthog";
 import { fetchSearchVisibility } from "@/lib/searchConsole";
+import { fetchTwitterAccountHealth, fetchTwitterMentions } from "@/lib/twitterScraper";
+import { fetchGuildMemberCount } from "@/lib/discordApi";
 
 export interface PullSummary {
   outcomeMetrics: "pulled" | "unavailable";
   channelMetrics: "pulled" | "unavailable";
   blogOrganicSessions: "pulled" | "unavailable";
   searchVisibility: "pulled" | "unavailable";
+  twitterAccountHealth: "pulled" | "unavailable";
+  twitterMentions: "pulled" | "unavailable";
+  discordMembers: "pulled" | "unavailable";
 }
 
 /// Known channels are whatever utm_source values have ever been tracked —
@@ -38,6 +43,9 @@ export async function pullAllAutomatedMetrics(reportId: string): Promise<PullSum
     channelMetrics: "unavailable",
     blogOrganicSessions: "unavailable",
     searchVisibility: "unavailable",
+    twitterAccountHealth: "unavailable",
+    twitterMentions: "unavailable",
+    discordMembers: "unavailable",
   };
 
   // --- Outcome metrics (FR-5/7): New Signups (pageview at the signup page path),
@@ -162,6 +170,95 @@ export async function pullAllAutomatedMetrics(reportId: string): Promise<PullSum
       },
     });
     summary.searchVisibility = "pulled";
+  }
+
+  // --- Twitter account health: follower count, weekly engagement, top tweet.
+  // Impressions/views aren't exposed by this scraper (native Twitter Analytics
+  // is the only source), so that field stays manual regardless of this pull.
+  // A quiet week (zero tweets posted) is a legitimate engagement=0, but tells
+  // us nothing about follower count — that falls back to the last known value
+  // rather than regressing to blank just because nothing was posted.
+  const accountHealthResult = await fetchTwitterAccountHealth(weekStart, weekEnd, settings.twitterHandle);
+  if (accountHealthResult.available) {
+    const existingExtras = await prisma.weeklyExtras.findUnique({ where: { reportId } });
+    const followerCount = accountHealthResult.data.followerCount ?? existingExtras?.twitterFollowerCount ?? null;
+    await prisma.weeklyExtras.upsert({
+      where: { reportId },
+      create: {
+        reportId,
+        twitterFollowerCount: followerCount,
+        twitterEngagement: accountHealthResult.data.engagement,
+        twitterMetricsPulledAt: accountHealthResult.pulledAt,
+        ...(accountHealthResult.data.topTweetUrl ? { topTweetUrl: accountHealthResult.data.topTweetUrl } : {}),
+      },
+      update: {
+        twitterFollowerCount: followerCount,
+        twitterEngagement: accountHealthResult.data.engagement,
+        twitterMetricsNaReason: null,
+        twitterMetricsPulledAt: accountHealthResult.pulledAt,
+        ...(accountHealthResult.data.topTweetUrl ? { topTweetUrl: accountHealthResult.data.topTweetUrl } : {}),
+      },
+    });
+    summary.twitterAccountHealth = "pulled";
+  }
+
+  // --- General Twitter mentions of HydraDB — feeds the same organic
+  // brand_mentions log Layer 3's manual entries use, tagged so it's clear
+  // these came from the scraper rather than someone spotting one by hand.
+  const mentionsResult = await fetchTwitterMentions(weekStart, weekEnd, settings.brandedQueryTerms);
+  if (mentionsResult.available) {
+    for (const item of mentionsResult.data.items) {
+      await prisma.brandMention.upsert({
+        where: { externalId: item.externalId },
+        create: {
+          reportId,
+          mentionSource: "organic",
+          platform: "x",
+          postUrl: item.postUrl,
+          commentUrl: item.postUrl,
+          commentText: item.commentText,
+          postedDate: item.postedDate,
+          sourceMethod: "api_scraper",
+          externalId: item.externalId,
+        },
+        update: {
+          commentText: item.commentText,
+        },
+      });
+    }
+    summary.twitterMentions = "pulled";
+  }
+
+  // --- Discord total members (real API) + "new members" net-change
+  // approximation (this week's total minus last week's — see discordApi.ts
+  // for why a true join count isn't possible without an always-on bot).
+  const memberResult = await fetchGuildMemberCount(settings.discordGuildId);
+  if (memberResult.available) {
+    const priorExtras = await prisma.weeklyExtras.findFirst({
+      where: { report: { weekStartDate: priorStart } },
+      select: { discordTotalMembers: true },
+    });
+    const newMembers =
+      priorExtras?.discordTotalMembers != null ? memberResult.data.totalMembers - priorExtras.discordTotalMembers : null;
+
+    await prisma.weeklyExtras.upsert({
+      where: { reportId },
+      create: {
+        reportId,
+        discordTotalMembers: memberResult.data.totalMembers,
+        discordNewMembers: newMembers,
+        discordNewMembersNaReason: newMembers === null ? "N/A — no prior week's total to compare against yet" : null,
+        discordNewMembersPulledAt: memberResult.pulledAt,
+      },
+      update: {
+        discordTotalMembers: memberResult.data.totalMembers,
+        discordTotalMembersNaReason: null,
+        discordNewMembers: newMembers,
+        discordNewMembersNaReason: newMembers === null ? "N/A — no prior week's total to compare against yet" : null,
+        discordNewMembersPulledAt: memberResult.pulledAt,
+      },
+    });
+    summary.discordMembers = "pulled";
   }
 
   return summary;

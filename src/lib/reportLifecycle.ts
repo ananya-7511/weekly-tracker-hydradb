@@ -24,14 +24,16 @@ export interface WeeklyExtrasLike {
   topDevrelContentFreetext: string | null;
   topDevrelContentNaReason: string | null;
   twitterFollowerCount: number | null;
-  twitterImpressions: number | null;
   twitterEngagement: number | null;
   twitterMetricsNaReason: string | null;
+  twitterImpressions: number | null;
+  twitterImpressionsNaReason: string | null;
   blogOrganicSessions: number | null;
   blogOrganicSessionsNaReason: string | null;
   discordActiveMembers: number | null;
+  discordActiveMembersNaReason: string | null;
   discordTotalMembers: number | null;
-  discordNaReason: string | null;
+  discordTotalMembersNaReason: string | null;
   discordNewMembers: number | null;
   discordNewMembersNaReason: string | null;
 }
@@ -72,18 +74,12 @@ export function findMissingFields(report: ReportForLifecycleCheck): string[] {
 
   const ex = report.weeklyExtras;
   if (!ex || !isFilled(ex.topDevrelContentFreetext, ex.topDevrelContentNaReason)) missing.push("Top DevRel Content Piece");
-  if (
-    !ex ||
-    !(
-      isFilled(ex.twitterFollowerCount, ex.twitterMetricsNaReason) &&
-      isFilled(ex.twitterImpressions, ex.twitterMetricsNaReason) &&
-      isFilled(ex.twitterEngagement, ex.twitterMetricsNaReason)
-    )
-  )
+  if (!ex || !(isFilled(ex.twitterFollowerCount, ex.twitterMetricsNaReason) && isFilled(ex.twitterEngagement, ex.twitterMetricsNaReason)))
     missing.push("Twitter Account Metrics");
+  if (!ex || !isFilled(ex.twitterImpressions, ex.twitterImpressionsNaReason)) missing.push("Twitter Impressions");
   if (!ex || !isFilled(ex.blogOrganicSessions, ex.blogOrganicSessionsNaReason)) missing.push("Blog Organic Sessions");
-  if (!ex || !(isFilled(ex.discordActiveMembers, ex.discordNaReason) && isFilled(ex.discordTotalMembers, ex.discordNaReason)))
-    missing.push("Discord Active Members");
+  if (!ex || !isFilled(ex.discordActiveMembers, ex.discordActiveMembersNaReason)) missing.push("Discord Active Members");
+  if (!ex || !isFilled(ex.discordTotalMembers, ex.discordTotalMembersNaReason)) missing.push("Discord Total Members");
   if (!ex || !isFilled(ex.discordNewMembers, ex.discordNewMembersNaReason)) missing.push("Discord New Members");
 
   const REQUIRED_SIGNALS = ["source_quality", "time_to_activation", "organic_impressions", "churned_inactive"];

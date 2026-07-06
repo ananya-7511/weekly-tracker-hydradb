@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { confirmActivationEvent, setSignupPagePath, setBrandedQueryTerms } from "@/lib/settings";
+import { confirmActivationEvent, setSignupPagePath, setBrandedQueryTerms, setTwitterHandle, setDiscordGuildId } from "@/lib/settings";
 import { TRIGGER_CONFIG_DEFAULTS } from "@/lib/triggers/evaluate";
 
 const CONFIG_KEYS = Object.keys(TRIGGER_CONFIG_DEFAULTS);
@@ -61,5 +61,19 @@ export async function updateBrandedQueryTermsAction(formData: FormData) {
     .map((t) => t.trim().toLowerCase())
     .filter(Boolean);
   await setBrandedQueryTerms(terms);
+  revalidatePath("/settings");
+}
+
+export async function updateTwitterHandleAction(formData: FormData) {
+  const handle = String(formData.get("twitterHandle") ?? "").trim().replace(/^@/, "");
+  if (!handle) return;
+  await setTwitterHandle(handle);
+  revalidatePath("/settings");
+}
+
+export async function updateDiscordGuildIdAction(formData: FormData) {
+  const guildId = String(formData.get("discordGuildId") ?? "").trim();
+  if (!guildId) return;
+  await setDiscordGuildId(guildId);
   revalidatePath("/settings");
 }

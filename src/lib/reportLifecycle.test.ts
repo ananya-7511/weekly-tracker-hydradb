@@ -9,14 +9,16 @@ function completeReport(): ReportForLifecycleCheck {
       topDevrelContentFreetext: "A post",
       topDevrelContentNaReason: null,
       twitterFollowerCount: 1000,
-      twitterImpressions: 5000,
       twitterEngagement: 300,
       twitterMetricsNaReason: null,
+      twitterImpressions: 5000,
+      twitterImpressionsNaReason: null,
       blogOrganicSessions: 200,
       blogOrganicSessionsNaReason: null,
       discordActiveMembers: 40,
+      discordActiveMembersNaReason: null,
       discordTotalMembers: 100,
-      discordNaReason: null,
+      discordTotalMembersNaReason: null,
       discordNewMembers: 10,
       discordNewMembersNaReason: null,
     },
@@ -47,6 +49,40 @@ describe("findMissingFields / canMoveToReadyForDecisions", () => {
     report.outcomeMetrics = { newSignups: null, newSignupsNaReason: null, totalUniqueVisitors: 300, totalUniqueVisitorsNaReason: null };
     const missing = findMissingFields(report);
     expect(missing).toContain("New Signups");
+    expect(canMoveToReadyForDecisions(report).ok).toBe(false);
+  });
+
+  it("does not treat Twitter Impressions as satisfied just because the auto-pulled follower/engagement fields cleared their own shared reason", () => {
+    // Regression: twitterImpressions used to share twitterMetricsNaReason with
+    // the auto-pulled fields, so a successful account-health pull (which clears
+    // that shared reason) would silently mark Impressions as filled even though
+    // it has neither a value nor its own reason.
+    const report = completeReport();
+    report.weeklyExtras = {
+      ...report.weeklyExtras!,
+      twitterFollowerCount: 1200,
+      twitterEngagement: 400,
+      twitterMetricsNaReason: null,
+      twitterImpressions: null,
+      twitterImpressionsNaReason: null,
+    };
+    expect(findMissingFields(report)).toContain("Twitter Impressions");
+    expect(canMoveToReadyForDecisions(report).ok).toBe(false);
+  });
+
+  it("does not treat Discord Active Members as satisfied just because an auto-pulled Total Members clears its own reason", () => {
+    // Same class of bug as Twitter Impressions above: discordTotalMembers is
+    // now auto-pullable via the Discord API while discordActiveMembers stays
+    // manual — they must never share one reason field.
+    const report = completeReport();
+    report.weeklyExtras = {
+      ...report.weeklyExtras!,
+      discordTotalMembers: 550,
+      discordTotalMembersNaReason: null,
+      discordActiveMembers: null,
+      discordActiveMembersNaReason: null,
+    };
+    expect(findMissingFields(report)).toContain("Discord Active Members");
     expect(canMoveToReadyForDecisions(report).ok).toBe(false);
   });
 

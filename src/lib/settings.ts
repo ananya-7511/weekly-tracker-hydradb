@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
 const DEFAULT_SIGNUP_PAGE_PATH = "/sign-up";
+const DEFAULT_TWITTER_HANDLE = "Hydra_DB";
+const DEFAULT_DISCORD_GUILD_ID = "1489825700079734845";
 
 export async function getAppSettings() {
   const settings = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
@@ -9,6 +11,8 @@ export async function getAppSettings() {
     activationEventName: settings?.activationEventName ?? null,
     activationEventLockedAt: settings?.activationEventLockedAt ?? null,
     brandedQueryTerms: settings?.brandedQueryTerms ?? [],
+    twitterHandle: settings?.twitterHandle ?? DEFAULT_TWITTER_HANDLE,
+    discordGuildId: settings?.discordGuildId ?? DEFAULT_DISCORD_GUILD_ID,
   };
 }
 
@@ -36,5 +40,21 @@ export async function setBrandedQueryTerms(terms: string[]) {
     where: { id: "singleton" },
     create: { id: "singleton", brandedQueryTerms: terms },
     update: { brandedQueryTerms: terms },
+  });
+}
+
+export async function setTwitterHandle(handle: string) {
+  return prisma.appSettings.upsert({
+    where: { id: "singleton" },
+    create: { id: "singleton", twitterHandle: handle },
+    update: { twitterHandle: handle },
+  });
+}
+
+export async function setDiscordGuildId(guildId: string) {
+  return prisma.appSettings.upsert({
+    where: { id: "singleton" },
+    create: { id: "singleton", discordGuildId: guildId },
+    update: { discordGuildId: guildId },
   });
 }

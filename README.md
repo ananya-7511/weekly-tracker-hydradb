@@ -65,10 +65,18 @@ No credentials are required to explore the app — every integration runs in moc
   above. A channel that drops to zero this week gets an explicit `0` row instead of
   disappearing, so the 3-week zero-streak trigger can see it.
 - **Blog Organic Sessions** auto-pulled from PostHog (`/blog/*`, no-initial-UTM proxy).
-- **Twitter account health** (follower count, weekly impressions, engagement) and **Discord
-  New Members** are manual-entry fields today, ready to become scraper-API auto-pulls once
-  that integration is wired in (schema/UI already support `pulledAt` + N/A-reason for both —
-  see "Twitter/Discord scraper — pending" below). Discord Active/Total Members stay manual.
+- **Twitter account health** (follower count, weekly engagement) auto-pulled via the Apify
+  `apidojo/tweet-scraper` actor (`src/lib/twitterScraper.ts`) — no login/cookie required.
+  **Twitter Impressions stays manual** — the scraper has no view/impression-count field,
+  and native Twitter Analytics (login-only) is the only real source for that number.
+- **General Twitter mentions of HydraDB** auto-pulled via the same actor's keyword search
+  (no auth needed), feeding the same organic `brand_mentions` log Layer 3's manual entries
+  use — reuses the Branded Query Terms list rather than a separate setting.
+- **Discord Total Members** auto-pulled via the Discord bot API. **Discord New Members** is
+  a net-change approximation (this week's total minus last week's) computed at pull time —
+  Discord has no endpoint for retroactively listing who joined when, only a live event
+  stream that would need an always-on bot process. **Discord Active Members stays manual**
+  (no API gives "posted in the last 7 days" without scanning every channel's history).
 - **Manual, guided entry** for **Top DevRel Content Piece** (freetext + link, explicitly
   labeled "DevRel" — real Content Tracking Dashboard integration is a Phase 2 item, PRD
   Section 3) and all four Layer 3 Signal Notes.
@@ -161,21 +169,33 @@ and set it on `/settings` — New Signups, Sign-Ups by Channel, and Primary Conv
 all key off it. (The Activation Event setting on the same page is dormant for now —
 Outcome-layer Activation Rate was removed, revisit later.)
 
-### 5. Twitter/Discord scraper — pending
-Ananya's team is providing a third-party scraper API for two things, not yet wired in:
-- **Twitter**: account health (follower count, weekly impressions, engagement) — schema
-  fields already exist (`WeeklyExtras.twitterFollowerCount/twitterImpressions/twitterEngagement`,
-  manual entry today) — plus general Twitter mentions of HydraDB, which should feed the
-  existing `brand_mentions` table (`mentionSource = organic`, `platform = x`,
-  `sourceMethod = api_scraper`) rather than a separate table.
-- **Discord**: new member additions this week — `WeeklyExtras.discordNewMembers`, sitting
-  alongside the existing manual Active/Total Members fields, not replacing them.
+### 5. Twitter/X account health + mentions (Apify)
+1. [Apify Console](https://console.apify.com/) → **Settings → Integrations** → copy your
+   API token → `APIFY_API_TOKEN`. This uses the `apidojo/tweet-scraper` actor — no separate
+   subscription needed beyond your Apify account's usage-based billing (~$0.40/1,000 tweets,
+   50-tweet minimum per query; a weekly pull is a few cents/month at this volume).
+2. Set the **Twitter Scraper handle** on `/settings` (default `Hydra_DB`).
+3. General mentions reuse the **Branded Query Terms** list from Section 3 above — no
+   separate setting.
+4. **Known limitation**: as of building this, live test calls against this actor
+   (including a trivial broad-term search) returned zero real results — the integration
+   code is verified correct against the actor's actual input/output schema (confirmed via
+   Apify's API directly, not just its marketing docs) and degrades gracefully to N/A rather
+   than a fabricated number, but the underlying scraper itself may be rate-limited/blocked
+   by X at any given time. Check the run logs in your Apify Console if numbers stay
+   persistently empty.
 
-Once the actual API contract (base URL, auth, response shape) is available, add a
-`src/lib/scraperApi.ts` client following the same mock-mode-until-configured pattern as
-`src/lib/posthog.ts`, and wire its pulls into `src/lib/metrics/pullMetrics.ts` next to the
-other auto-pulled fields — the UI and schema are already shaped to receive it (`pulledAt`
-captions, N/A-reason pairs).
+### 6. Discord member count (bot API)
+1. [discord.com/developers/applications](https://discord.com/developers/applications) →
+   **New Application** → **Bot** tab → **Reset Token** → copy it → `DISCORD_BOT_TOKEN`. No
+   privileged intents needed — just the member count.
+2. **OAuth2 → URL Generator** → scope `bot` (no permissions needed) → open the generated
+   URL and add the bot to the HydraDB server.
+3. Set the **Discord guild (server) ID** on `/settings` (defaults to the one already
+   configured: `1489825700079734845`).
+4. Total Members auto-pulls immediately. New Members (the week-over-week delta) needs one
+   prior week's total already stored before it can compute anything — it'll show
+   "N/A — no prior week's total to compare against yet" on the first pull.
 
 ## Deploying to Supabase + Vercel
 
@@ -214,6 +234,8 @@ prisma/schema.prisma              Data model (WeeklyReport + all Layer 1-4 child
 prisma/seed.ts                     Mock data generator (7 published weeks + 1 draft)
 src/lib/posthog.ts                 PostHog HogQL Query API client
 src/lib/searchConsole.ts           Google Search Console client
+src/lib/twitterScraper.ts          Twitter/X account health + mentions via the Apify tweet-scraper actor
+src/lib/discordApi.ts              Discord bot API — total member count only
 src/lib/slack.ts                   Thin Slack Web API wrapper (CommunityMentions ingestion only, no posting)
 src/lib/distribution.ts            "Copy as Discord text" summary builder — no automated posting
 src/lib/mentions/csvParser.ts      Pure CommunityMentions CSV parser (shared by both ingestion paths)

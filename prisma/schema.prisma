@@ -155,25 +155,42 @@ model WeeklyExtras {
   /// Twitter account performance/health, auto-pulled via a scraper API —
   /// replaces the earlier manual organic/influencer impressions split, since
   /// this is first-party account health, not a campaign breakdown.
-  twitterFollowerCount    Int?
-  twitterImpressions      Int?
-  twitterEngagement       Int?
-  twitterMetricsNaReason  String?
-  twitterMetricsPulledAt  DateTime?
-  topTweetUrl             String?
+  twitterFollowerCount   Int?
+  twitterEngagement      Int?
+  twitterMetricsNaReason String?
+  twitterMetricsPulledAt DateTime?
+  /// Kept separate from twitterMetricsNaReason above: this field is manual-only
+  /// forever (the scraper has no view/impression count), so it must never be
+  /// silently "satisfied" just because the auto-pulled fields cleared their
+  /// shared reason on a successful pull.
+  twitterImpressions         Int?
+  twitterImpressionsNaReason String?
+  topTweetUrl                String?
 
   blogOrganicSessions         Int?
   blogOrganicSessionsNaReason String?
   blogOrganicSessionsPulledAt DateTime?
   blogOrganicSessionsSource   String?
 
-  discordActiveMembers Int?
-  discordTotalMembers  Int?
-  discordNaReason      String?
+  /// Always manual — no API gives "members who posted in the last 7 days"
+  /// without scanning message history across every channel.
+  discordActiveMembers         Int?
+  discordActiveMembersNaReason String?
 
-  /// New Discord joins this week, auto-pulled via a scraper API — sits
-  /// alongside the manual active/total member counts above rather than
-  /// replacing them.
+  /// Auto-pulled via the Discord bot API (GET /guilds/{id}?with_counts=true) —
+  /// kept on its OWN reason field, separate from discordActiveMembers above,
+  /// for the same reason Twitter's fields were split: an auto-pull clearing a
+  /// *shared* reason must never accidentally mark an unrelated manual field
+  /// as "satisfied."
+  discordTotalMembers         Int?
+  discordTotalMembersNaReason String?
+
+  /// Net new members this week = this week's discordTotalMembers minus last
+  /// week's, computed at pull time (not a true join count — see Section 5's
+  /// own caveat: Discord has no API for "who joined between date X and Y,"
+  /// only a live join-event stream, which needs an always-on bot process we
+  /// don't have). Shares its pulledAt with discordTotalMembers since both
+  /// come from the same API call.
   discordNewMembers         Int?
   discordNewMembersNaReason String?
   discordNewMembersPulledAt DateTime?
@@ -297,6 +314,13 @@ model AppSettings {
   activationEventName     String?
   activationEventLockedAt DateTime?
   brandedQueryTerms       String[]  @default([])
+  /// HydraDB's X/Twitter handle, used for the account-health scraper pull
+  /// (follower count, weekly engagement) — the brand mention *search* reuses
+  /// brandedQueryTerms above rather than a separate list.
+  twitterHandle           String?
+  /// The HydraDB Discord server's guild ID, used for the member-count pull
+  /// (GET /guilds/{id}?with_counts=true via the Discord bot API).
+  discordGuildId          String?
   updatedAt               DateTime  @updatedAt
 }
 

@@ -3,7 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { getAppSettings } from "@/lib/settings";
 import { TRIGGER_CONFIG_DEFAULTS } from "@/lib/triggers/evaluate";
 import { ActivationEventForm } from "./ActivationEventForm";
-import { updateTriggerConfig, updateSignupPagePathAction, updateBrandedQueryTermsAction } from "./actions";
+import {
+  updateTriggerConfig,
+  updateSignupPagePathAction,
+  updateBrandedQueryTermsAction,
+  updateTwitterHandleAction,
+  updateDiscordGuildIdAction,
+} from "./actions";
 
 // Live config reads/writes — must never be statically prerendered at build time.
 export const dynamic = "force-dynamic";
@@ -65,13 +71,59 @@ export default async function SettingsPage({
 
       <Card>
         <Title>Branded Query Terms (Open Question #9)</Title>
-        <Text className="mt-1">Used to filter Google Search Console results — one term per line or comma-separated.</Text>
+        <Text className="mt-1">
+          Used to filter Google Search Console results, and to search Twitter for general
+          HydraDB mentions — one term per line or comma-separated.
+        </Text>
         <form action={updateBrandedQueryTermsAction} className="mt-4 flex flex-col gap-2">
           <textarea
             name="brandedQueryTerms"
             rows={4}
             defaultValue={settings.brandedQueryTerms.join("\n")}
             className="rounded-tremor-default border border-tremor-border px-2 py-1 text-tremor-default"
+          />
+          <button type="submit" className="w-fit rounded-tremor-default border border-tremor-border px-3 py-1.5 text-tremor-default">
+            Save
+          </button>
+        </form>
+      </Card>
+
+      <Card>
+        <Title>Twitter Scraper</Title>
+        <Text className="mt-1">
+          The X/Twitter handle used for account-health pulls (follower count, weekly
+          engagement, top tweet). General mentions of HydraDB reuse the Branded Query Terms
+          above rather than a separate list.
+        </Text>
+        <form action={updateTwitterHandleAction} className="mt-4 flex flex-col gap-2">
+          <input
+            type="text"
+            name="twitterHandle"
+            defaultValue={settings.twitterHandle}
+            placeholder="Hydra_DB"
+            className="w-60 rounded-tremor-default border border-tremor-border px-2 py-1 text-tremor-default"
+          />
+          <button type="submit" className="w-fit rounded-tremor-default border border-tremor-border px-3 py-1.5 text-tremor-default">
+            Save
+          </button>
+        </form>
+      </Card>
+
+      <Card>
+        <Title>Discord</Title>
+        <Text className="mt-1">
+          Server (guild) ID used for the member-count pull. Total Members is auto-pulled via
+          the Discord bot API; New Members is a net-change approximation (this week&apos;s
+          total minus last week&apos;s), not a true join count — Discord has no API for
+          retroactively listing who joined when.
+        </Text>
+        <form action={updateDiscordGuildIdAction} className="mt-4 flex flex-col gap-2">
+          <input
+            type="text"
+            name="discordGuildId"
+            defaultValue={settings.discordGuildId}
+            placeholder="1489825700079734845"
+            className="w-60 rounded-tremor-default border border-tremor-border px-2 py-1 text-tremor-default"
           />
           <button type="submit" className="w-fit rounded-tremor-default border border-tremor-border px-3 py-1.5 text-tremor-default">
             Save

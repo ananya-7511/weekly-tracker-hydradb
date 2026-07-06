@@ -80,18 +80,18 @@ export async function saveWeeklyExtras(reportId: string, weekStartIso: string, f
       topDevrelContentNaReason:
         strOrNull(formData, "topDevrelContentFreetext") === null ? strOrNull(formData, "topDevrelContentNaReason") : null,
       twitterFollowerCount,
-      twitterImpressions,
       twitterEngagement,
       twitterMetricsNaReason:
-        twitterFollowerCount === null && twitterImpressions === null && twitterEngagement === null
-          ? strOrNull(formData, "twitterMetricsNaReason")
-          : null,
+        twitterFollowerCount === null && twitterEngagement === null ? strOrNull(formData, "twitterMetricsNaReason") : null,
+      twitterImpressions,
+      twitterImpressionsNaReason: twitterImpressions === null ? strOrNull(formData, "twitterImpressionsNaReason") : null,
       topTweetUrl: strOrNull(formData, "topTweetUrl"),
       blogOrganicSessions: blogSessions,
       blogOrganicSessionsNaReason: blogSessions === null ? strOrNull(formData, "blogOrganicSessionsNaReason") : null,
       discordActiveMembers: discordActive,
+      discordActiveMembersNaReason: discordActive === null ? strOrNull(formData, "discordActiveMembersNaReason") : null,
       discordTotalMembers: discordTotal,
-      discordNaReason: discordActive === null && discordTotal === null ? strOrNull(formData, "discordNaReason") : null,
+      discordTotalMembersNaReason: discordTotal === null ? strOrNull(formData, "discordTotalMembersNaReason") : null,
       discordNewMembers,
       discordNewMembersNaReason: discordNewMembers === null ? strOrNull(formData, "discordNewMembersNaReason") : null,
     },
