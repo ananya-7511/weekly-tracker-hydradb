@@ -513,7 +513,7 @@ export default async function ReportPage({ params }: { params: { week: string } 
                 disabled={!publishCheck.ok}
                 className="w-fit rounded-tremor-default bg-emerald-600 px-4 py-2 text-tremor-default font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
               >
-                Publish &amp; Post to Slack
+                Publish
               </button>
             </form>
           )}
@@ -522,8 +522,8 @@ export default async function ReportPage({ params }: { params: { week: string } 
         </div>
         {report.status === "published" && (
           <Text className="mt-2 text-emerald-600">
-            Published {report.publishedAt?.toISOString().slice(0, 16).replace("T", " ")} UTC — summary posted to Slack
-            (or copy the Discord text above if that&apos;s the distribution channel this week).
+            Published {report.publishedAt?.toISOString().slice(0, 16).replace("T", " ")} UTC — no automated posting
+            happens on publish; use the copy button above to share the summary manually wherever makes sense.
           </Text>
         )}
       </Card>

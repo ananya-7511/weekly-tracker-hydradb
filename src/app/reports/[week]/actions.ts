@@ -6,7 +6,6 @@ import { pullAllAutomatedMetrics } from "@/lib/metrics/pullMetrics";
 import { evaluateTriggersForReport } from "@/lib/triggers/runner";
 import { canMoveToReadyForDecisions, canPublish } from "@/lib/reportLifecycle";
 import { getReportById } from "@/lib/data/reportQueries";
-import { postPublishedReportSummary } from "@/lib/distribution";
 import type { SignalType } from "@prisma/client";
 
 function numOrNull(formData: FormData, key: string): number | null {
@@ -190,7 +189,5 @@ export async function publishReport(reportId: string, weekStartIso: string): Pro
     where: { id: reportId },
     data: { status: "published", publishedAt: new Date() },
   });
-  const refreshed = await getReportById(reportId);
-  if (refreshed) await postPublishedReportSummary(refreshed);
   revalidateReport(weekStartIso);
 }

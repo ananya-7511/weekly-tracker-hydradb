@@ -1,9 +1,8 @@
-/// Report distribution (FR-26/27/28) — Slack chat.postMessage on publish, plus
-/// a Discord-formatted text variant for the "copy as Discord text" fallback
-/// (Section 6's Step 6 allows either channel). Deliberately has no email path
-/// at all — FR-28 isn't a default-off flag, there's simply no function here
-/// that sends one.
-import { postMessage } from "@/lib/slack";
+/// Report distribution — no automated posting anywhere (the team's Slack
+/// channel is reserved for the CommunityMentions agency's daily drop, not
+/// weekly report noise). This builds the "copy as Discord-formatted text"
+/// fallback text only (FR-27), so the summary can still be shared manually
+/// wherever makes sense that week. Deliberately has no email path at all.
 import { computeSplit } from "@/lib/data/mentionsQueries";
 import type { FullReport } from "@/lib/data/reportQueries";
 
@@ -76,19 +75,7 @@ function buildSummaryLines(report: FullReport, bold: (s: string) => string): str
   return lines;
 }
 
-/// Slack mrkdwn uses single asterisks for bold.
-export function formatSlackSummaryText(report: FullReport): string {
-  return buildSummaryLines(report, (s) => `*${s}*`).join("\n");
-}
-
-/// Discord markdown uses double asterisks for bold — otherwise identical
-/// content, per FR-27's "copy as Discord-formatted text" fallback.
+/// Discord markdown uses double asterisks for bold.
 export function formatDiscordSummaryText(report: FullReport): string {
   return buildSummaryLines(report, (s) => `**${s}**`).join("\n");
-}
-
-export async function postPublishedReportSummary(report: FullReport): Promise<boolean> {
-  const channelId = process.env.SLACK_CHANNEL_ID;
-  if (!channelId) return false;
-  return postMessage(channelId, formatSlackSummaryText(report));
 }

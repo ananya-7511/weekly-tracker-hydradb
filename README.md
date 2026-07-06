@@ -85,12 +85,14 @@ No credentials are required to explore the app — every integration runs in moc
   informational, never a publish blocker (FR-20).
 - **Decision log** with the Specific/Time-bound/Falsifiable self-certification gate
   (`src/lib/reportLifecycle.ts#canPublish`) — a checklist, not an AI quality judgment.
-- **Historical trend view** (`/trends`) — signups, activation rate, per-channel signups,
-  blog sessions, the combined Branded Search Impressions + Total Mentions chart (FR-33),
-  and the Paid vs. Organic comparison panel (FR-33a).
-- **Distribution** on publish — a formatted summary posted to Slack (`chat.postMessage`),
-  plus a "copy as Discord-formatted text" fallback button. No email path exists anywhere
-  in this codebase, per the PRD's explicit instruction (FR-28).
+- **Historical trend view** (`/trends`) — signups, Primary Conversion Rate, per-channel
+  signups, blog sessions, the combined Branded Search Impressions + Total Mentions chart
+  (FR-33), and the Paid vs. Organic comparison panel (FR-33a).
+- **No automated distribution** — publishing a report doesn't post anywhere. The team's
+  Slack channel is reserved for the CommunityMentions agency's daily drop, not weekly
+  report noise. A "copy as Discord-formatted text" button on each report lets you share
+  the summary manually wherever makes sense that week. No email path exists anywhere in
+  this codebase either, per the PRD's explicit instruction (FR-28).
 - **Settings page** (`/settings`) — every trigger threshold, the locked activation event
   (FR-6a: requires an explicit confirmation checkbox, not a plain edit), the signup event
   name, and the branded query term list are editable config, not hardcoded (FR-19).
@@ -122,15 +124,16 @@ works identically** — same parser, same dedup logic, zero functional gap.
 Each is independent — add it, redeploy, that source goes live. Everything else keeps
 running in mock mode.
 
-### 1. Slack (new app — do not reuse the Content Tracking Dashboard's bot token)
+### 1. Slack (new app — read-only, used only for CommunityMentions ingestion)
+This project never posts to Slack — no weekly-report distribution. The only thing Slack
+is used for is reading the existing/dedicated channel where the CommunityMentions agency
+already drops its daily CSV report.
 1. [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**.
-2. **OAuth & Permissions → Bot Token Scopes**: `channels:history`, `channels:read`,
-   `chat:write` (add `groups:history` instead of `channels:history` if a channel is private).
+2. **OAuth & Permissions → Bot Token Scopes**: `channels:history`, `channels:read` (add
+   `groups:history` instead of `channels:history` if the channel is private).
 3. **Install to Workspace**, copy the **Bot User OAuth Token** (`xoxb-...`) → `SLACK_BOT_TOKEN`.
-4. Invite the bot to `#gtm-weekly` (or whatever you name it) → that channel's ID is
-   `SLACK_CHANNEL_ID` (distribution target, FR-26).
-5. Decide where the CommunityMentions agency's daily export lands — invite the same bot
-   there too, and set `SLACK_MENTIONS_CHANNEL_ID` (can be the same channel or a dedicated one).
+4. Invite the bot to that existing CommunityMentions channel → its ID is
+   `SLACK_MENTIONS_CHANNEL_ID`.
 
 ### 2. PostHog (new Personal API Key, same underlying HydraDB project)
 Settings → Personal API Keys → scoped to read-only Query access on the existing HydraDB
@@ -192,8 +195,8 @@ prisma/schema.prisma              Data model (WeeklyReport + all Layer 1-4 child
 prisma/seed.ts                     Mock data generator (7 published weeks + 1 draft)
 src/lib/posthog.ts                 PostHog HogQL Query API client
 src/lib/searchConsole.ts           Google Search Console client
-src/lib/slack.ts                   Thin Slack Web API wrapper (shared by ingestion + distribution)
-src/lib/distribution.ts            Slack/Discord formatted summary builder, publish-time post
+src/lib/slack.ts                   Thin Slack Web API wrapper (CommunityMentions ingestion only, no posting)
+src/lib/distribution.ts            "Copy as Discord text" summary builder — no automated posting
 src/lib/mentions/csvParser.ts      Pure CommunityMentions CSV parser (shared by both ingestion paths)
 src/lib/mentions/ingestMentions.ts Slack + manual-CSV ingestion into BrandMention
 src/lib/metrics/pullMetrics.ts     On-demand PostHog/Search Console pull, called by button + cron

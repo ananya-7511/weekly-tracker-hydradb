@@ -1,7 +1,9 @@
-/// Thin Slack Web API wrapper, reused by both weekly-report distribution (FR-26)
-/// and CommunityMentions ingestion (FR-31) — mirrors the companion Content
-/// Tracking Dashboard's raw-fetch, Bearer-token style (src/lib/ingestion/slackSource.ts,
-/// slackNotify.ts) rather than pulling in the full Slack SDK for a handful of calls.
+/// Thin Slack Web API wrapper for CommunityMentions ingestion (FR-31) — reads
+/// the dedicated channel where the agency drops its daily CSV export. Mirrors
+/// the companion Content Tracking Dashboard's raw-fetch, Bearer-token style
+/// (src/lib/ingestion/slackSource.ts) rather than pulling in the full Slack SDK
+/// for a handful of calls. No posting/distribution happens through this
+/// project's Slack app — that channel is reserved for the agency's report.
 
 export interface SlackFileAttachment {
   id: string;
@@ -18,9 +20,10 @@ export interface SlackMessage {
   files: SlackFileAttachment[];
 }
 
-/// Channel events (joins, topic changes) carry a `subtype`; this app's own
-/// chat.postMessage calls always carry `bot_id` — excluding both avoids
-/// self-ingestion loops and system noise, same rule as the companion app.
+/// Channel events (joins, topic changes) carry a `subtype`; anything posted by
+/// a bot (e.g. the agency's own reporting bot re-posting a summary) carries
+/// `bot_id` — excluding both avoids ingesting system/bot noise as if it were
+/// the actual CSV drop, same rule as the companion app.
 function isIngestibleMessage(m: { text?: string; subtype?: string; bot_id?: string }): boolean {
   return !!m.text && !m.subtype && !m.bot_id;
 }
@@ -82,25 +85,3 @@ export async function downloadSlackFileText(urlPrivateDownload: string): Promise
   }
 }
 
-/// Posts a message to a channel. No-ops (returns false) in mock mode or if the
-/// bot lacks `chat:write` — never blocks the caller's own flow on a Slack failure.
-export async function postMessage(channelId: string, text: string): Promise<boolean> {
-  const token = process.env.SLACK_BOT_TOKEN;
-  if (!token || !channelId) return false;
-  try {
-    const res = await fetch("https://slack.com/api/chat.postMessage", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json; charset=utf-8",
-      },
-      body: JSON.stringify({ channel: channelId, text }),
-    });
-    const data = await res.json();
-    if (!data.ok) console.error("slack.postMessage: Slack API rejected the message:", data.error);
-    return Boolean(data.ok);
-  } catch (err) {
-    console.error("slack.postMessage: request failed:", err);
-    return false;
-  }
-}
