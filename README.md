@@ -65,10 +65,13 @@ No credentials are required to explore the app — every integration runs in moc
   above. A channel that drops to zero this week gets an explicit `0` row instead of
   disappearing, so the 3-week zero-streak trigger can see it.
 - **Blog Organic Sessions** auto-pulled from PostHog (`/blog/*`, no-initial-UTM proxy).
-- **Manual, guided entry** for Twitter Impressions (organic/influencer split), Discord
-  Active/Total Members, **Top DevRel Content Piece** (freetext + link, explicitly labeled
-  "DevRel" — real Content Tracking Dashboard integration is a Phase 2 item, PRD Section 3),
-  and all four Layer 3 Signal Notes.
+- **Twitter account health** (follower count, weekly impressions, engagement) and **Discord
+  New Members** are manual-entry fields today, ready to become scraper-API auto-pulls once
+  that integration is wired in (schema/UI already support `pulledAt` + N/A-reason for both —
+  see "Twitter/Discord scraper — pending" below). Discord Active/Total Members stay manual.
+- **Manual, guided entry** for **Top DevRel Content Piece** (freetext + link, explicitly
+  labeled "DevRel" — real Content Tracking Dashboard integration is a Phase 2 item, PRD
+  Section 3) and all four Layer 3 Signal Notes.
 - **Search Visibility** (Layer 4) auto-pulled from Google Search Console's Search Analytics
   API, filtered to a configurable branded-terms list (`src/lib/searchConsole.ts`): Branded
   Impressions/Clicks/Avg Position, New Queries Entering Top 20.
@@ -157,6 +160,22 @@ Confirm the exact page path a successful sign-up lands a visitor on (default `/s
 and set it on `/settings` — New Signups, Sign-Ups by Channel, and Primary Conversion Rate
 all key off it. (The Activation Event setting on the same page is dormant for now —
 Outcome-layer Activation Rate was removed, revisit later.)
+
+### 5. Twitter/Discord scraper — pending
+Ananya's team is providing a third-party scraper API for two things, not yet wired in:
+- **Twitter**: account health (follower count, weekly impressions, engagement) — schema
+  fields already exist (`WeeklyExtras.twitterFollowerCount/twitterImpressions/twitterEngagement`,
+  manual entry today) — plus general Twitter mentions of HydraDB, which should feed the
+  existing `brand_mentions` table (`mentionSource = organic`, `platform = x`,
+  `sourceMethod = api_scraper`) rather than a separate table.
+- **Discord**: new member additions this week — `WeeklyExtras.discordNewMembers`, sitting
+  alongside the existing manual Active/Total Members fields, not replacing them.
+
+Once the actual API contract (base URL, auth, response shape) is available, add a
+`src/lib/scraperApi.ts` client following the same mock-mode-until-configured pattern as
+`src/lib/posthog.ts`, and wire its pulls into `src/lib/metrics/pullMetrics.ts` next to the
+other auto-pulled fields — the UI and schema are already shaped to receive it (`pulledAt`
+captions, N/A-reason pairs).
 
 ## Deploying to Supabase + Vercel
 

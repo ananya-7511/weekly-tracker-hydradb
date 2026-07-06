@@ -237,16 +237,25 @@ export default async function ReportPage({ params }: { params: { week: string } 
           </div>
 
           <NaField
-            label="Twitter Impressions — Organic"
-            name="twitterImpressionsOrganic"
-            defaultValue={report.weeklyExtras?.twitterImpressionsOrganic ?? null}
-            naDefaultValue={report.weeklyExtras?.twitterImpressionsNaReason ?? null}
+            label="Twitter Follower Count"
+            name="twitterFollowerCount"
+            defaultValue={report.weeklyExtras?.twitterFollowerCount ?? null}
+            naDefaultValue={report.weeklyExtras?.twitterMetricsNaReason ?? null}
+            sourceCaption={
+              report.weeklyExtras?.twitterMetricsPulledAt ? `pulled ${relativeTime(report.weeklyExtras.twitterMetricsPulledAt)}` : undefined
+            }
           />
           <NaField
-            label="Twitter Impressions — Influencer-driven"
-            name="twitterImpressionsInfluencer"
-            defaultValue={report.weeklyExtras?.twitterImpressionsInfluencer ?? null}
-            naDefaultValue={report.weeklyExtras?.twitterImpressionsNaReason ?? null}
+            label="Twitter Impressions"
+            name="twitterImpressions"
+            defaultValue={report.weeklyExtras?.twitterImpressions ?? null}
+            naDefaultValue={report.weeklyExtras?.twitterMetricsNaReason ?? null}
+          />
+          <NaField
+            label="Twitter Engagement (likes + retweets)"
+            name="twitterEngagement"
+            defaultValue={report.weeklyExtras?.twitterEngagement ?? null}
+            naDefaultValue={report.weeklyExtras?.twitterMetricsNaReason ?? null}
           />
           <div className="flex flex-col gap-1">
             <label className="text-tremor-default font-medium text-tremor-content-emphasis">Top Tweet URL</label>
@@ -279,6 +288,17 @@ export default async function ReportPage({ params }: { params: { week: string } 
             name="discordTotalMembers"
             defaultValue={report.weeklyExtras?.discordTotalMembers ?? null}
             naDefaultValue={report.weeklyExtras?.discordNaReason ?? null}
+          />
+          <NaField
+            label="Discord New Members This Week"
+            name="discordNewMembers"
+            defaultValue={report.weeklyExtras?.discordNewMembers ?? null}
+            naDefaultValue={report.weeklyExtras?.discordNewMembersNaReason ?? null}
+            sourceCaption={
+              report.weeklyExtras?.discordNewMembersPulledAt
+                ? `pulled ${relativeTime(report.weeklyExtras.discordNewMembersPulledAt)}`
+                : undefined
+            }
           />
           {report.weeklyExtras?.discordActiveMembers != null && report.weeklyExtras?.discordTotalMembers ? (
             <div className="sm:col-span-2 text-tremor-default text-tremor-content">

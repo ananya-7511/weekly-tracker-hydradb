@@ -64,11 +64,13 @@ export async function saveChannelMetric(reportId: string, weekStartIso: string, 
 }
 
 export async function saveWeeklyExtras(reportId: string, weekStartIso: string, formData: FormData) {
-  const twitterOrganic = numOrNull(formData, "twitterImpressionsOrganic");
-  const twitterInfluencer = numOrNull(formData, "twitterImpressionsInfluencer");
+  const twitterFollowerCount = numOrNull(formData, "twitterFollowerCount");
+  const twitterImpressions = numOrNull(formData, "twitterImpressions");
+  const twitterEngagement = numOrNull(formData, "twitterEngagement");
   const blogSessions = numOrNull(formData, "blogOrganicSessions");
   const discordActive = numOrNull(formData, "discordActiveMembers");
   const discordTotal = numOrNull(formData, "discordTotalMembers");
+  const discordNewMembers = numOrNull(formData, "discordNewMembers");
 
   await prisma.weeklyExtras.update({
     where: { reportId },
@@ -77,16 +79,21 @@ export async function saveWeeklyExtras(reportId: string, weekStartIso: string, f
       topDevrelContentUrl: strOrNull(formData, "topDevrelContentUrl"),
       topDevrelContentNaReason:
         strOrNull(formData, "topDevrelContentFreetext") === null ? strOrNull(formData, "topDevrelContentNaReason") : null,
-      twitterImpressionsOrganic: twitterOrganic,
-      twitterImpressionsInfluencer: twitterInfluencer,
-      twitterImpressionsNaReason:
-        twitterOrganic === null && twitterInfluencer === null ? strOrNull(formData, "twitterImpressionsNaReason") : null,
+      twitterFollowerCount,
+      twitterImpressions,
+      twitterEngagement,
+      twitterMetricsNaReason:
+        twitterFollowerCount === null && twitterImpressions === null && twitterEngagement === null
+          ? strOrNull(formData, "twitterMetricsNaReason")
+          : null,
       topTweetUrl: strOrNull(formData, "topTweetUrl"),
       blogOrganicSessions: blogSessions,
       blogOrganicSessionsNaReason: blogSessions === null ? strOrNull(formData, "blogOrganicSessionsNaReason") : null,
       discordActiveMembers: discordActive,
       discordTotalMembers: discordTotal,
       discordNaReason: discordActive === null && discordTotal === null ? strOrNull(formData, "discordNaReason") : null,
+      discordNewMembers,
+      discordNewMembersNaReason: discordNewMembers === null ? strOrNull(formData, "discordNewMembersNaReason") : null,
     },
   });
   revalidateReport(weekStartIso);

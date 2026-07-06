@@ -54,6 +54,9 @@ enum MentionSourceMethod {
   slack_ingest
   manual_csv
   manual_entry
+  /// Auto-pulled organic mentions (e.g. Twitter mentions of HydraDB via a
+  /// scraper API), as opposed to Ananya manually logging one she spotted.
+  api_scraper
 }
 
 enum Brand {
@@ -149,10 +152,15 @@ model WeeklyExtras {
   topDevrelContentUrl      String?
   topDevrelContentNaReason String?
 
-  twitterImpressionsOrganic    Int?
-  twitterImpressionsInfluencer Int?
-  twitterImpressionsNaReason   String?
-  topTweetUrl                  String?
+  /// Twitter account performance/health, auto-pulled via a scraper API —
+  /// replaces the earlier manual organic/influencer impressions split, since
+  /// this is first-party account health, not a campaign breakdown.
+  twitterFollowerCount    Int?
+  twitterImpressions      Int?
+  twitterEngagement       Int?
+  twitterMetricsNaReason  String?
+  twitterMetricsPulledAt  DateTime?
+  topTweetUrl             String?
 
   blogOrganicSessions         Int?
   blogOrganicSessionsNaReason String?
@@ -162,6 +170,13 @@ model WeeklyExtras {
   discordActiveMembers Int?
   discordTotalMembers  Int?
   discordNaReason      String?
+
+  /// New Discord joins this week, auto-pulled via a scraper API — sits
+  /// alongside the manual active/total member counts above rather than
+  /// replacing them.
+  discordNewMembers         Int?
+  discordNewMembersNaReason String?
+  discordNewMembersPulledAt DateTime?
 }
 
 /// Layer 3 — watched signals, deliberately not headline KPIs (FR-14).
