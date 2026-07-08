@@ -9,6 +9,7 @@ import { getAppSettings } from "@/lib/settings";
 import * as posthog from "@/lib/posthog";
 import { fetchSearchVisibility } from "@/lib/searchConsole";
 import { fetchTwitterAccountHealth, fetchTwitterMentions } from "@/lib/twitterScraper";
+import { fetchTwitterProfile } from "@/lib/scrapeDoTwitter";
 import { fetchGuildMemberCount } from "@/lib/discordApi";
 
 export interface PullSummary {
@@ -172,31 +173,42 @@ export async function pullAllAutomatedMetrics(reportId: string): Promise<PullSum
     summary.searchVisibility = "pulled";
   }
 
-  // --- Twitter account health: follower count, weekly engagement, top tweet.
-  // Impressions/views aren't exposed by this scraper (native Twitter Analytics
-  // is the only source), so that field stays manual regardless of this pull.
-  // A quiet week (zero tweets posted) is a legitimate engagement=0, but tells
-  // us nothing about follower count — that falls back to the last known value
-  // rather than regressing to blank just because nothing was posted.
-  const accountHealthResult = await fetchTwitterAccountHealth(weekStart, weekEnd, settings.twitterHandle);
-  if (accountHealthResult.available) {
+  // --- Twitter account health: follower count (via Scrape.do — reads the
+  // schema.org ProfilePage JSON-LD block X publishes on its own profile pages,
+  // confirmed live), weekly engagement + top tweet (via Apify, when that's
+  // available). Impressions/views aren't exposed by either, native Twitter
+  // Analytics is the only source, so that field stays manual regardless.
+  // Either source can be down independently — each falls back to the last
+  // known value rather than regressing to blank.
+  const [profileResult, accountHealthResult] = await Promise.all([
+    fetchTwitterProfile(settings.twitterHandle),
+    fetchTwitterAccountHealth(weekStart, weekEnd, settings.twitterHandle),
+  ]);
+  if (profileResult.available || accountHealthResult.available) {
     const existingExtras = await prisma.weeklyExtras.findUnique({ where: { reportId } });
-    const followerCount = accountHealthResult.data.followerCount ?? existingExtras?.twitterFollowerCount ?? null;
+    const followerCount = profileResult.available
+      ? profileResult.data.followerCount
+      : accountHealthResult.available
+        ? accountHealthResult.data.followerCount
+        : (existingExtras?.twitterFollowerCount ?? null);
+    const engagement = accountHealthResult.available ? accountHealthResult.data.engagement : (existingExtras?.twitterEngagement ?? null);
+    const pulledAt = profileResult.available ? profileResult.pulledAt : accountHealthResult.available ? accountHealthResult.pulledAt : new Date();
+
     await prisma.weeklyExtras.upsert({
       where: { reportId },
       create: {
         reportId,
         twitterFollowerCount: followerCount,
-        twitterEngagement: accountHealthResult.data.engagement,
-        twitterMetricsPulledAt: accountHealthResult.pulledAt,
-        ...(accountHealthResult.data.topTweetUrl ? { topTweetUrl: accountHealthResult.data.topTweetUrl } : {}),
+        twitterEngagement: engagement,
+        twitterMetricsPulledAt: pulledAt,
+        ...(accountHealthResult.available && accountHealthResult.data.topTweetUrl ? { topTweetUrl: accountHealthResult.data.topTweetUrl } : {}),
       },
       update: {
         twitterFollowerCount: followerCount,
-        twitterEngagement: accountHealthResult.data.engagement,
+        twitterEngagement: engagement,
         twitterMetricsNaReason: null,
-        twitterMetricsPulledAt: accountHealthResult.pulledAt,
-        ...(accountHealthResult.data.topTweetUrl ? { topTweetUrl: accountHealthResult.data.topTweetUrl } : {}),
+        twitterMetricsPulledAt: pulledAt,
+        ...(accountHealthResult.available && accountHealthResult.data.topTweetUrl ? { topTweetUrl: accountHealthResult.data.topTweetUrl } : {}),
       },
     });
     summary.twitterAccountHealth = "pulled";
