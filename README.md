@@ -80,6 +80,16 @@ No credentials are required to explore the app — every integration runs in moc
   needed when it's working), feeding the same organic `brand_mentions` log Layer 3's manual
   entries use, reusing the Branded Query Terms list rather than a separate setting. Currently
   unavailable for the same upstream reason as weekly engagement above.
+- **YouTube mentions/relevant content** auto-pulled via Scrape.do's dedicated YouTube search
+  plugin (`src/lib/scrapeDoYoutube.ts`) — same token as the Twitter follower count above, one
+  request per Branded Query Term, deduped by video ID, feeding the same organic
+  `brand_mentions` log. Confirmed live and working (14 real results for "hydradb"/"hydra db").
+  A relevance filter (`isRelevantVideo`) discards results YouTube's own fuzzy search
+  surfaced that don't actually contain a branded term in the title/description (e.g. an
+  unrelated "Hydra" Postgres analytics tool, unrelated songs with "Hydra" in the title) —
+  it can't catch a genuine coincidental name collision (a video literally titled with the
+  brand's name for something unrelated), so a quick skim before trusting the weekly count is
+  still worthwhile.
 - **Discord Total Members** auto-pulled via the Discord bot API. **Discord New Members** is
   a net-change approximation (this week's total minus last week's) computed at pull time —
   Discord has no endpoint for retroactively listing who joined when, only a live event
@@ -217,6 +227,24 @@ Outcome-layer Activation Rate was removed, revisit later.)
    prior week's total already stored before it can compute anything — it'll show
    "N/A — no prior week's total to compare against yet" on the first pull.
 
+### 8. YouTube mentions (Scrape.do) — confirmed live and working
+1. Uses the same `SCRAPE_DO_TOKEN` as Section 5 above — no separate credential.
+2. Reuses the **Branded Query Terms** list from Section 3 — no separate setting. Each term
+   is searched independently via `GET https://api.scrape.do/plugin/google/youtube` and
+   results are deduped by video ID before being written to the organic `brand_mentions` log.
+3. Published dates come back from YouTube only as relative text ("3 days ago", "2 weeks
+   ago") and are converted to an approximate absolute date anchored to pull time — good
+   enough to bucket into the right week, not exact to the day, and month/year units use a
+   fixed 30/365-day approximation.
+4. **Known limitation**: YouTube's search relevance is fuzzy word-overlap, not exact-phrase
+   matching, so a raw search for a two-word term like "hydra db" also surfaces unrelated
+   results (an unrelated "Hydra" Postgres analytics tool, unrelated songs with "Hydra" in
+   the title). A post-filter (`isRelevantVideo`) drops anything that doesn't literally
+   contain a branded term in its title/description before it reaches the mentions log — but
+   it can't distinguish a genuine coincidental collision (something else literally named
+   with the brand's exact term) from a real mention. Treat this the same as any other
+   organic mention: worth a skim, not a fully hands-off number.
+
 ## Deploying to Supabase + Vercel
 
 This project is **not deployed yet** — set up your own Supabase project, GitHub repo, and
@@ -255,6 +283,7 @@ prisma/seed.ts                     Mock data generator (7 published weeks + 1 dr
 src/lib/posthog.ts                 PostHog HogQL Query API client
 src/lib/searchConsole.ts           Google Search Console client
 src/lib/scrapeDoTwitter.ts         Twitter/X follower count via Scrape.do (JSON-LD ProfilePage block)
+src/lib/scrapeDoYoutube.ts         YouTube mentions via Scrape.do's YouTube search plugin, with a relevance post-filter
 src/lib/twitterScraper.ts          Twitter/X weekly engagement + mentions via the Apify tweet-scraper actor
 src/lib/discordApi.ts              Discord bot API — total member count only
 src/lib/slack.ts                   Thin Slack Web API wrapper (CommunityMentions ingestion only, no posting)

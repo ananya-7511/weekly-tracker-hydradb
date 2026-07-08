@@ -10,7 +10,9 @@ import * as posthog from "@/lib/posthog";
 import { fetchSearchVisibility } from "@/lib/searchConsole";
 import { fetchTwitterAccountHealth, fetchTwitterMentions } from "@/lib/twitterScraper";
 import { fetchTwitterProfile } from "@/lib/scrapeDoTwitter";
+import { fetchYoutubeMentions } from "@/lib/scrapeDoYoutube";
 import { fetchGuildMemberCount } from "@/lib/discordApi";
+import type { MentionPlatform } from "@prisma/client";
 
 export interface PullSummary {
   outcomeMetrics: "pulled" | "unavailable";
@@ -19,7 +21,42 @@ export interface PullSummary {
   searchVisibility: "pulled" | "unavailable";
   twitterAccountHealth: "pulled" | "unavailable";
   twitterMentions: "pulled" | "unavailable";
+  youtubeMentions: "pulled" | "unavailable";
   discordMembers: "pulled" | "unavailable";
+}
+
+interface OrganicMentionItem {
+  externalId: string;
+  postUrl: string;
+  postTitle?: string | null;
+  commentText: string | null;
+  postedDate: Date;
+}
+
+/// Shared by every auto-pulled organic-mentions source (Twitter, YouTube, ...)
+/// — one upsert path keyed on the source-specific externalId, so re-running a
+/// pull is always safe (never duplicates, always refreshes the mutable
+/// fields).
+async function upsertOrganicMention(reportId: string, platform: MentionPlatform, item: OrganicMentionItem) {
+  await prisma.brandMention.upsert({
+    where: { externalId: item.externalId },
+    create: {
+      reportId,
+      mentionSource: "organic",
+      platform,
+      postTitle: item.postTitle ?? null,
+      postUrl: item.postUrl,
+      commentUrl: item.postUrl,
+      commentText: item.commentText,
+      postedDate: item.postedDate,
+      sourceMethod: "api_scraper",
+      externalId: item.externalId,
+    },
+    update: {
+      postTitle: item.postTitle ?? null,
+      commentText: item.commentText,
+    },
+  });
 }
 
 /// Known channels are whatever utm_source values have ever been tracked —
@@ -46,6 +83,7 @@ export async function pullAllAutomatedMetrics(reportId: string): Promise<PullSum
     searchVisibility: "unavailable",
     twitterAccountHealth: "unavailable",
     twitterMentions: "unavailable",
+    youtubeMentions: "unavailable",
     discordMembers: "unavailable",
   };
 
@@ -220,25 +258,22 @@ export async function pullAllAutomatedMetrics(reportId: string): Promise<PullSum
   const mentionsResult = await fetchTwitterMentions(weekStart, weekEnd, settings.brandedQueryTerms);
   if (mentionsResult.available) {
     for (const item of mentionsResult.data.items) {
-      await prisma.brandMention.upsert({
-        where: { externalId: item.externalId },
-        create: {
-          reportId,
-          mentionSource: "organic",
-          platform: "x",
-          postUrl: item.postUrl,
-          commentUrl: item.postUrl,
-          commentText: item.commentText,
-          postedDate: item.postedDate,
-          sourceMethod: "api_scraper",
-          externalId: item.externalId,
-        },
-        update: {
-          commentText: item.commentText,
-        },
-      });
+      await upsertOrganicMention(reportId, "x", item);
     }
     summary.twitterMentions = "pulled";
+  }
+
+  // --- YouTube mentions/content relevant to HydraDB (Scrape.do's YouTube
+  // search plugin) — same organic brand_mentions log, reusing the Branded
+  // Query Terms list rather than a separate setting. Published dates from
+  // YouTube search are only ever relative ("4 days ago"), so postedDate here
+  // is an approximation (see scrapeDoYoutube.ts), not exact to the day.
+  const youtubeResult = await fetchYoutubeMentions(settings.brandedQueryTerms);
+  if (youtubeResult.available) {
+    for (const item of youtubeResult.data.items) {
+      await upsertOrganicMention(reportId, "youtube", item);
+    }
+    summary.youtubeMentions = "pulled";
   }
 
   // --- Discord total members (real API) + "new members" net-change
