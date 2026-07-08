@@ -10,8 +10,9 @@
 /// works regardless of what the agency's Slack message ends up looking like.
 import { prisma } from "@/lib/prisma";
 import { fetchChannelMessages, downloadSlackFileText } from "@/lib/slack";
-import { parseCommunityMentionsCsv, type CsvParseError } from "./csvParser";
-import type { Prisma } from "@prisma/client";
+import { parseCommunityMentionsCsv, type CsvParseError, type ParsedMentionRow } from "./csvParser";
+import { fetchCommunityMentionsDashboard } from "./dashboardApi";
+import type { Prisma, MentionSourceMethod } from "@prisma/client";
 
 export interface MentionsIngestionSummary {
   configured: boolean;
@@ -28,10 +29,7 @@ async function findReportForDate(date: Date) {
   });
 }
 
-async function upsertMentionRow(
-  row: ReturnType<typeof parseCommunityMentionsCsv>["rows"][number],
-  sourceMethod: "slack_ingest" | "manual_csv"
-) {
+export async function upsertMentionRow(row: ParsedMentionRow, sourceMethod: MentionSourceMethod) {
   const report = await findReportForDate(row.postedDate);
   const data: Prisma.BrandMentionUncheckedCreateInput = {
     reportId: report?.id ?? null,
@@ -129,4 +127,40 @@ export async function ingestMentionsFromCsvText(csvText: string): Promise<CsvUpl
     }
   }
   return { rowsIngested, rowsSkipped, errors };
+}
+
+export interface DashboardApiIngestSummary {
+  configured: boolean;
+  rowsFetched: number;
+  rowsIngested: number;
+  rowsSkippedOnFetch: number;
+  rowsSkippedOnUpsert: number;
+}
+
+/// The CommunityMentions agency's read-only dashboard API (src/lib/mentions/dashboardApi.ts)
+/// — no cursor needed, since it's a plain date-range query rather than an
+/// incremental feed; re-upserting the same rolling window on every run is how
+/// a status transitioning "posted" -> "verified" days later gets picked up.
+/// Coexists with Slack/manual-CSV ingestion (FR-31) via the shared externalId
+/// dedup convention.
+export async function ingestMentionsFromDashboardApi(): Promise<DashboardApiIngestSummary> {
+  const { available, rows, rowsSkipped } = await fetchCommunityMentionsDashboard();
+  const summary: DashboardApiIngestSummary = {
+    configured: available,
+    rowsFetched: rows.length,
+    rowsIngested: 0,
+    rowsSkippedOnFetch: rowsSkipped,
+    rowsSkippedOnUpsert: 0,
+  };
+  if (!available) return summary;
+
+  for (const row of rows) {
+    try {
+      await upsertMentionRow(row, "dashboard_api");
+      summary.rowsIngested++;
+    } catch {
+      summary.rowsSkippedOnUpsert++;
+    }
+  }
+  return summary;
 }

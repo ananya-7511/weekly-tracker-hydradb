@@ -57,8 +57,11 @@ const CHANNEL_TO_PLATFORM: Record<string, ParsedMentionPlatform> = {
 };
 
 /// djb2 — a small, deterministic non-cryptographic hash, good enough for a dedup
-/// key over a handful of stable fields (not a security boundary).
-function stableHash(input: string): string {
+/// key over a handful of stable fields (not a security boundary). Exported so
+/// other ingestion paths (e.g. dashboardApi.ts) derive the SAME externalId for
+/// the same underlying mention — that's what lets two different sources of the
+/// same row collapse into one BrandMention instead of duplicating.
+export function stableHash(input: string): string {
   let hash = 5381;
   for (let i = 0; i < input.length; i++) {
     hash = (hash * 33) ^ input.charCodeAt(i);

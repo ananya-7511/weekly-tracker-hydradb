@@ -456,7 +456,7 @@ export default async function ReportPage({ params }: { params: { week: string } 
                 {report.brandMentions.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-3 text-tremor-content-subtle">
-                      No mentions logged for this week yet — use <Link href="/mentions/upload" className="text-tremor-brand hover:underline">Upload Mentions CSV</Link> or wait for the next Slack ingestion pass.
+                      No mentions logged for this week yet — use <Link href="/mentions/upload" className="text-tremor-brand hover:underline">Upload Mentions CSV</Link> or wait for the next daily ingestion pass (dashboard API + Slack).
                     </td>
                   </tr>
                 )}

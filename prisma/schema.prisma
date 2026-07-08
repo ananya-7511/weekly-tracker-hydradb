@@ -57,6 +57,13 @@ enum MentionSourceMethod {
   /// Auto-pulled organic mentions (e.g. Twitter mentions of HydraDB via a
   /// scraper API), as opposed to Ananya manually logging one she spotted.
   api_scraper
+  /// Auto-pulled PAID mentions directly from the CommunityMentions agency's
+  /// own read-only dashboard JSON API — supersedes slack_ingest/manual_csv as
+  /// the primary path once configured, but doesn't replace them (FR-31: all
+  /// paths must coexist without a data-model change; externalId dedup means
+  /// the same mention ingested twice via different paths still collapses to
+  /// one row).
+  dashboard_api
 }
 
 enum Brand {

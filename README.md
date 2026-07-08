@@ -103,11 +103,12 @@ No credentials are required to explore the app — every integration runs in moc
   Impressions/Clicks/Avg Position, New Queries Entering Top 20.
 - **Brand Mentions** (Layers 3 + 4 unified, `BrandMention` model) — every row carries an
   explicit, always-visible `mention_source` badge (Paid/Organic, `MentionBadge` component).
-  Paid ingestion via **Slack** (`src/lib/mentions/ingestMentions.ts` — see "CommunityMentions
-  ingestion" below for an important caveat) with a **manual CSV upload** fallback
-  (`/mentions/upload`) sharing the exact same parser (`src/lib/mentions/csvParser.ts`).
-  Only `status = verified` counts toward weekly Paid totals; `posting` is ingested but
-  excluded until it transitions.
+  Paid ingestion via the CommunityMentions agency's own **dashboard JSON API**
+  (`src/lib/mentions/dashboardApi.ts` — confirmed live, 936 real mentions across 5
+  platforms), with **Slack** and **manual CSV upload** (`/mentions/upload`) as coexisting
+  fallbacks sharing the exact same dedup convention (see "CommunityMentions ingestion"
+  below). Only `status = verified` counts toward weekly Paid totals; `posting` is ingested
+  but excluded until it transitions.
 - **Intervention Trigger Engine** — all 8 rules from PRD Section 5/FR-17, each a pure,
   independently-tested function (`src/lib/triggers/evaluate.ts`) reading config-driven
   thresholds (`src/lib/triggers/runner.ts` does the DB/history fetch). Triggers are
@@ -131,32 +132,59 @@ integration for Top DevRel Content Piece, Churned/Inactive Sign-Ups + Time to Ac
 automation, Discord member-count automation, 48-hour organic-mention follow-up reminders,
 Twitter impressions automation, LLM-assisted decision drafting.
 
-## CommunityMentions ingestion — an important assumption to verify
+## CommunityMentions ingestion
 
 FR-31 lists three possible ingestion paths (Slack parsing, Google Sheets sync, manual CSV)
 and explicitly says to architect so switching between them doesn't require a data-model
-change. We built **Slack parsing** as the Phase 1 path, but the PRD's own Open Question #8
-flags that **the real format of the agency's daily Slack message is unconfirmed** — the
-only artifact that IS confirmed is the CSV column schema itself
-(`Date, Channel, Subreddit, Post Title, Post URL, Comment, Comment URL, Thread Upvotes, Status`).
+change. As of the agency sharing their own dashboard details, there's now a **confirmed,
+live, working** path: their read-only dashboard JSON API
+(`src/lib/mentions/dashboardApi.ts`) — the same data that powers their pinned Google Sheet
+at `https://docs.google.com/spreadsheets/d/1SLydmxiAAJ07X_vhuqae3FGNdWlAmWw8Kswh-LnGuok`,
+fetched directly with a query-string token, no OAuth/service-account setup needed. Verified
+live: 936 real mentions returned across all 5 platforms (Reddit, X, Medium, YouTube,
+LinkedIn) for a 60-day window, zero unparseable rows. This is the recommended primary path
+— see Section 1 below.
 
-So `src/lib/mentions/ingestMentions.ts` looks for **any `.csv` file attachment** on a
-message in the configured `SLACK_MENTIONS_CHANNEL_ID` channel — not a specific message
-format. If the agency's actual daily report turns out to look different (e.g., an inline
-table instead of an attachment, or arrives via email/Google Sheets instead of Slack),
-this will need a real adjustment once you've seen one actual message. Until then, or if
-Slack ingestion is never configured, **the manual CSV upload page (`/mentions/upload`)
-works identically** — same parser, same dedup logic, zero functional gap.
+**Slack parsing** (`ingestMentionsFromSlack`) and the **manual CSV upload page**
+(`/mentions/upload`) both still work and run alongside the dashboard API, per FR-31's "no
+path lock-in" requirement — the PRD's own Open Question #8 flagged that the real format of
+the agency's daily Slack message was unconfirmed, so Slack ingestion looks for any `.csv`
+file attachment on a message in `SLACK_MENTIONS_CHANNEL_ID` rather than a specific format.
+All three paths write through the same `upsertMentionRow` helper and share one externalId
+dedup convention (derived from `commentUrl`, or `date|channel|postUrl` when there's no
+comment URL) — the same mention picked up by more than one path collapses into a single
+`BrandMention` row instead of duplicating.
+
+The dashboard API's own status vocabulary uses `"posted"` where the CSV schema uses
+`"posting"` for the same not-yet-machine-verified state — `dashboardApi.ts` translates it
+so every consumer keeps working off one vocabulary (`posting` / `verified` / `removed`).
+The API also returns `numComments`, `impressions`, and `backlink` per row — richer data than
+the confirmed CSV schema — that isn't captured yet since nothing in the current model uses
+it; worth adding if a future metric wants it.
 
 ## Going live: credentials, one at a time
 
 Each is independent — add it, redeploy, that source goes live. Everything else keeps
 running in mock mode.
 
-### 1. Slack (new app — read-only, used only for CommunityMentions ingestion)
-This project never posts to Slack — no weekly-report distribution. The only thing Slack
-is used for is reading the existing/dedicated channel where the CommunityMentions agency
-already drops its daily CSV report.
+### 1. CommunityMentions dashboard API (preferred — confirmed live and working)
+1. Set `COMMUNITY_MENTIONS_API_URL` (already defaults to
+   `https://reddit-k539.onrender.com/api/reports/public/dashboard` in `.env.example`) and
+   `COMMUNITY_MENTIONS_API_TOKEN` — no OAuth/service-account setup, the token is a
+   query-string param the agency already provided.
+2. That's it — the daily cron (`/api/cron/mentions-ingest`) queries a rolling 60-day window
+   on every run and upserts by `externalId`, so a row that transitions `posted` (mapped to
+   `posting`) → `verified` days later is picked up automatically. Verified live: 936 real
+   mentions across Reddit/X/Medium/YouTube/LinkedIn.
+3. The agency also shared a pinned Google Sheet
+   (`https://docs.google.com/spreadsheets/d/1SLydmxiAAJ07X_vhuqae3FGNdWlAmWw8Kswh-LnGuok`)
+   with the same underlying data — that's the human-browsable version; this API is what the
+   app itself reads. No code change needed if you ever want to sanity-check one against the
+   other.
+
+### 2. Slack (optional fallback — read-only, used only for CommunityMentions ingestion)
+This project never posts to Slack — no weekly-report distribution. With Section 1 above
+configured, this is now a fallback per FR-31's "no path lock-in," not the primary path.
 1. [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**.
 2. **OAuth & Permissions → Bot Token Scopes**: `channels:history`, `channels:read` (add
    `groups:history` instead of `channels:history` if the channel is private).
@@ -164,13 +192,13 @@ already drops its daily CSV report.
 4. Invite the bot to that existing CommunityMentions channel → its ID is
    `SLACK_MENTIONS_CHANNEL_ID`.
 
-### 2. PostHog (new Personal API Key, same underlying HydraDB project)
+### 3. PostHog (new Personal API Key, same underlying HydraDB project)
 Settings → Personal API Keys → scoped to read-only Query access on the existing HydraDB
 project. `POSTHOG_PROJECT_ID` is the same project ID the Content Tracking Dashboard uses —
 this is the one deliberate credential-adjacent value that's shared, because it's the same
 real signups data, not a duplicate.
 
-### 3. Google Search Console (new service account)
+### 4. Google Search Console (new service account)
 1. Google Cloud Console → create a service account → generate a JSON key.
 2. In Search Console (the verified `hydradb.com` property) → **Settings → Users and
    permissions** → add the service account's email as a user with **Restricted** (read)
@@ -181,13 +209,13 @@ real signups data, not a duplicate.
 4. Set the branded query term list on `/settings` (Open Question #9) — Search Visibility
    metrics stay unavailable until at least one term is configured.
 
-### 4. Sign-up page path
+### 5. Sign-up page path
 Confirm the exact page path a successful sign-up lands a visitor on (default `/sign-up`)
 and set it on `/settings` — New Signups, Sign-Ups by Channel, and Primary Conversion Rate
 all key off it. (The Activation Event setting on the same page is dormant for now —
 Outcome-layer Activation Rate was removed, revisit later.)
 
-### 5. Twitter/X follower count (Scrape.do) — confirmed live and working
+### 6. Twitter/X follower count (Scrape.do) — confirmed live and working
 1. [Scrape.do dashboard](https://dashboard.scrape.do/) → copy your token → `SCRAPE_DO_TOKEN`.
    Free tier (1,000 requests/month) is enough for a weekly pull. Get a **new** token for
    this project rather than reusing the Content Tracking Dashboard's.
@@ -195,12 +223,12 @@ Outcome-layer Activation Rate was removed, revisit later.)
 3. That's it — this renders the X profile page and reads its `ProfilePage` JSON-LD block
    for follower count. No further config, no auth beyond the token.
 
-### 6. Twitter/X weekly engagement + mentions (Apify) — currently blocked upstream
+### 7. Twitter/X weekly engagement + mentions (Apify) — currently blocked upstream
 1. [Apify Console](https://console.apify.com/) → **Settings → Integrations** → copy your
    API token → `APIFY_API_TOKEN`. This uses the `apidojo/tweet-scraper` actor — no separate
    subscription needed beyond your Apify account's usage-based billing (~$0.40/1,000 tweets,
    50-tweet minimum per query; a weekly pull is a few cents/month at this volume).
-2. General mentions reuse the **Branded Query Terms** list from Section 3 above — no
+2. General mentions reuse the **Branded Query Terms** list from Section 4 above — no
    separate setting.
 3. **Known limitation**: as of building this, live test calls against this actor —
    including a trivial broad-term search and even a direct profile-URL fetch for a known
@@ -215,7 +243,7 @@ Outcome-layer Activation Rate was removed, revisit later.)
    keyword-search capability at all regardless, so it can only ever help with weekly
    engagement, not general mentions.
 
-### 7. Discord member count (bot API)
+### 8. Discord member count (bot API)
 1. [discord.com/developers/applications](https://discord.com/developers/applications) →
    **New Application** → **Bot** tab → **Reset Token** → copy it → `DISCORD_BOT_TOKEN`. No
    privileged intents needed — just the member count.
@@ -227,9 +255,9 @@ Outcome-layer Activation Rate was removed, revisit later.)
    prior week's total already stored before it can compute anything — it'll show
    "N/A — no prior week's total to compare against yet" on the first pull.
 
-### 8. YouTube mentions (Scrape.do) — confirmed live and working
-1. Uses the same `SCRAPE_DO_TOKEN` as Section 5 above — no separate credential.
-2. Reuses the **Branded Query Terms** list from Section 3 — no separate setting. Each term
+### 9. YouTube mentions (Scrape.do) — confirmed live and working
+1. Uses the same `SCRAPE_DO_TOKEN` as Section 6 above — no separate credential.
+2. Reuses the **Branded Query Terms** list from Section 4 — no separate setting. Each term
    is searched independently via `GET https://api.scrape.do/plugin/google/youtube` and
    results are deduped by video ID before being written to the organic `brand_mentions` log.
 3. Published dates come back from YouTube only as relative text ("3 days ago", "2 weeks
@@ -288,8 +316,9 @@ src/lib/twitterScraper.ts          Twitter/X weekly engagement + mentions via th
 src/lib/discordApi.ts              Discord bot API — total member count only
 src/lib/slack.ts                   Thin Slack Web API wrapper (CommunityMentions ingestion only, no posting)
 src/lib/distribution.ts            "Copy as Discord text" summary builder — no automated posting
-src/lib/mentions/csvParser.ts      Pure CommunityMentions CSV parser (shared by both ingestion paths)
-src/lib/mentions/ingestMentions.ts Slack + manual-CSV ingestion into BrandMention
+src/lib/mentions/csvParser.ts      Pure CommunityMentions CSV parser (shared by all ingestion paths)
+src/lib/mentions/dashboardApi.ts   CommunityMentions agency's dashboard JSON API client (preferred path)
+src/lib/mentions/ingestMentions.ts Dashboard API + Slack + manual-CSV ingestion into BrandMention
 src/lib/metrics/pullMetrics.ts     On-demand PostHog/Search Console pull, called by button + cron
 src/lib/triggers/evaluate.ts       The 8 intervention-trigger rules, pure & independently tested
 src/lib/triggers/runner.ts         DB-facing orchestrator: fetches history, calls evaluate.ts, persists flags
@@ -301,7 +330,7 @@ src/app/trends/                    Historical charts + past-report index
 src/app/mentions/upload/           Manual CSV upload fallback for CommunityMentions
 src/app/settings/                  Trigger thresholds, activation-event lock, branded terms
 src/app/api/cron/weekly-pull/      Vercel Cron: ensure this week's draft + auto-pull + re-evaluate triggers
-src/app/api/cron/mentions-ingest/  Vercel Cron: daily Slack CSV poll
+src/app/api/cron/mentions-ingest/  Vercel Cron: daily dashboard-API pull + Slack CSV poll
 scripts/pullWeekly.ts              CLI entry point for `npm run pull:weekly`
 scripts/ingestMentions.ts          CLI entry point for `npm run ingest:mentions`
 ```
@@ -312,7 +341,9 @@ See Section 13 of the PRD for the full list. The ones most likely to need a deci
 this goes fully live:
 
 - **Channel dominance threshold** (Open Question #3) — defaulted to 50% on `/settings`, not confirmed.
-- **CommunityMentions ingestion format** (Open Question #8) — see the callout above.
+- **CommunityMentions ingestion format** (Open Question #8) — resolved: the agency's
+  dashboard JSON API is confirmed live and working (see "CommunityMentions ingestion"
+  above); Slack/CSV remain as coexisting fallbacks, not because the format is still unknown.
 - **Branded query term list** (Open Question #9) — empty until set on `/settings`.
 - **CommunityMentions scope** (Open Question #10) — the `brand` field on `BrandMention` is
   nullable/unused until Skillmake coverage is confirmed.
