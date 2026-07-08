@@ -4,6 +4,13 @@ Phase 1 MVP per `Weekly-Analytics-Tracker-PRD_1.md`. Everything runs today again
 mock history; each integration below flips to live the moment its credential is added to
 `.env` — no code changes required.
 
+**Currently scoped as a pure metrics/performance-tracking tool** — the Decision log and the
+`draft` → `ready_for_decisions` → `published` gated workflow are removed from the UI for
+now (the underlying `Decision`/`SignalNote` tables and `WeeklyReport.status` column still
+exist in the schema, untouched, so this is reversible without a data migration if the
+workflow comes back later). Each week's report is just a continuously-updating view of its
+metrics — no status to advance, nothing to "finish" before the numbers count.
+
 **This is a standalone project** — its own GitHub repo, Supabase project, Vercel project,
 and Slack app, deliberately separate from the companion **Content Tracking Dashboard**
 (`Ananya_HydraDB Dashboard`). The two apps share nothing except conventions and (per the
@@ -50,9 +57,9 @@ No credentials are required to explore the app — every integration runs in moc
 
 ## What's built (Phase 1, per PRD Section 12)
 
-- **Weekly report lifecycle** (`draft` → `ready_for_decisions` → `published`) with
-  no-silent-blanks enforcement at the schema and server-action layer, not just the UI
-  (`src/lib/reportLifecycle.ts`) — every metric is a `(value, N/A reason)` pair.
+- **No-silent-blanks enforcement** (`src/lib/reportLifecycle.ts#findMissingFields`) — every
+  metric is a `(value, N/A reason)` pair, and the report page shows a plain "still blank
+  this week" line (informational only, blocks nothing) whenever a field has neither.
 - **Outcome metrics** (Layer 1) auto-pulled from PostHog's HogQL Query API: New Signups
   (a $pageview reaching the configured sign-up page path, e.g. `/sign-up` — not a custom
   event), Total Unique Website Visitors, and the computed Primary Conversion Rate ("out of
@@ -97,7 +104,7 @@ No credentials are required to explore the app — every integration runs in moc
   (no API gives "posted in the last 7 days" without scanning every channel's history).
 - **Manual, guided entry** for **Top DevRel Content Piece** (freetext + link, explicitly
   labeled "DevRel" — real Content Tracking Dashboard integration is a Phase 2 item, PRD
-  Section 3) and all four Layer 3 Signal Notes.
+  Section 3).
 - **Search Visibility** (Layer 4) auto-pulled from Google Search Console's Search Analytics
   API, filtered to a configurable branded-terms list (`src/lib/searchConsole.ts`): Branded
   Impressions/Clicks/Avg Position, New Queries Entering Top 20.
@@ -111,10 +118,8 @@ No credentials are required to explore the app — every integration runs in moc
   but excluded until it transitions.
 - **Intervention Trigger Engine** — all 8 rules from PRD Section 5/FR-17, each a pure,
   independently-tested function (`src/lib/triggers/evaluate.ts`) reading config-driven
-  thresholds (`src/lib/triggers/runner.ts` does the DB/history fetch). Triggers are
-  informational, never a publish blocker (FR-20).
-- **Decision log** with the Specific/Time-bound/Falsifiable self-certification gate
-  (`src/lib/reportLifecycle.ts#canPublish`) — a checklist, not an AI quality judgment.
+  thresholds (`src/lib/triggers/runner.ts` does the DB/history fetch). Purely informational
+  (FR-20) — shown on the report page, resolvable with a freetext note, nothing more.
 - **Historical trend view** (`/trends`) — signups, Primary Conversion Rate, per-channel
   signups, blog sessions, the combined Branded Search Impressions + Total Mentions chart
   (FR-33), and the Paid vs. Organic comparison panel (FR-33a).
@@ -131,6 +136,13 @@ Deferred to Phase 2/3 per the PRD's own phasing: real Content Tracking Dashboard
 integration for Top DevRel Content Piece, Churned/Inactive Sign-Ups + Time to Activation
 automation, Discord member-count automation, 48-hour organic-mention follow-up reminders,
 Twitter impressions automation, LLM-assisted decision drafting.
+
+**Removed from the UI for now** (schema untouched, so no data was lost): the Decision log
+(Specific/Time-bound/Falsifiable self-certification) and the `draft` → `ready_for_decisions`
+→ `published` status-transition gate that used to sit in front of it, plus the Layer 3
+Signal Notes section (source quality / time-to-activation / organic impressions / churned
+sign-ups). The `/trends` "Past Reports" list and the Discord copy-text summary no longer
+reference report status or decisions accordingly.
 
 ## CommunityMentions ingestion
 

@@ -60,12 +60,6 @@ function buildSummaryLines(report: FullReport, bold: (s: string) => string): str
     }
   }
 
-  lines.push("");
-  lines.push(bold(`Decisions (${report.decisions.length})`));
-  for (const d of report.decisions) {
-    lines.push(`${report.decisions.indexOf(d) + 1}. ${d.text}`);
-  }
-
   const appUrl = process.env.APP_URL;
   if (appUrl) {
     lines.push("");

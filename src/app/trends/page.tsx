@@ -74,13 +74,13 @@ export default async function TrendsPage() {
       </Card>
 
       <Card>
-        <Title>Past Reports (FR-25)</Title>
-        <Text className="mt-1">Each report remains viewable in its original published form — the narrative/decisions matter as much as the numbers.</Text>
+        <Title>Past Reports</Title>
+        <Text className="mt-1">Every tracked week, for drilling into the underlying metrics.</Text>
         <ul className="mt-3 flex flex-col gap-1">
           {weeks.map((w) => (
             <li key={w.id}>
               <Link href={`/reports/${w.weekStartDate.toISOString().slice(0, 10)}`} className="text-tremor-brand hover:underline">
-                {w.weekStartDate.toISOString().slice(0, 10)} — {w.status.replace(/_/g, " ")}
+                {w.weekStartDate.toISOString().slice(0, 10)}
               </Link>
             </li>
           ))}

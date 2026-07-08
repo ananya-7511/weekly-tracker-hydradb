@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Card, Title, Text, Badge } from "@tremor/react";
+import { Card, Title, Text } from "@tremor/react";
 import { getReportByWeekStart } from "@/lib/data/reportQueries";
 import { formatWeekLabel } from "@/lib/dateWindow";
 import { computeSplit } from "@/lib/data/mentionsQueries";
-import { canMoveToReadyForDecisions, canPublish } from "@/lib/reportLifecycle";
+import { findMissingFields } from "@/lib/reportLifecycle";
 import { formatDiscordSummaryText } from "@/lib/distribution";
 import { MentionBadge, StatusBadge } from "@/components/MentionBadge";
 import { PullButton } from "./PullButton";
@@ -14,13 +14,6 @@ import * as actions from "./actions";
 // Live report data, mutated constantly via the Server Actions below — must
 // never be statically prerendered or cached.
 export const dynamic = "force-dynamic";
-
-const SIGNAL_LABELS: Record<string, string> = {
-  source_quality: "Sign-Up Source Quality",
-  time_to_activation: "Time to Activation",
-  organic_impressions: "Organic Impressions (unprompted mentions)",
-  churned_inactive: "Churned / Inactive Sign-Ups",
-};
 
 function relativeTime(date: Date | null): string {
   if (!date) return "";
@@ -75,8 +68,7 @@ export default async function ReportPage({ params }: { params: { week: string } 
   if (!report) notFound();
 
   const weekStartIso = formatWeekLabel(report.weekStartDate);
-  const readyCheck = canMoveToReadyForDecisions(report);
-  const publishCheck = canPublish(report.decisions);
+  const missingFields = findMissingFields(report);
   const split = computeSplit(report.brandMentions);
   const activeFlags = report.interventionFlags.filter((f) => f.autoDetected);
   const discordText = formatDiscordSummaryText(report);
@@ -84,7 +76,6 @@ export default async function ReportPage({ params }: { params: { week: string } 
   const saveOutcome = actions.saveOutcomeMetrics.bind(null, report.id, weekStartIso);
   const saveExtras = actions.saveWeeklyExtras.bind(null, report.id, weekStartIso);
   const saveSearch = actions.saveSearchVisibility.bind(null, report.id, weekStartIso);
-  const addDecisionAction = actions.addDecision.bind(null, report.id, weekStartIso);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8 flex flex-col gap-6">
@@ -93,11 +84,16 @@ export default async function ReportPage({ params }: { params: { week: string } 
           <Title>
             Week of {report.weekStartDate.toISOString().slice(0, 10)} – {report.weekEndDate.toISOString().slice(0, 10)}
           </Title>
-          <Badge color={report.status === "published" ? "emerald" : report.status === "ready_for_decisions" ? "amber" : "gray"}>
-            {report.status.replace(/_/g, " ")}
-          </Badge>
+          {missingFields.length > 0 && (
+            <Text className="mt-1 text-tremor-content-subtle">
+              Still blank this week: {missingFields.join(", ")}
+            </Text>
+          )}
         </div>
-        <PullButton reportId={report.id} weekStartIso={weekStartIso} />
+        <div className="flex items-center gap-3">
+          <CopyDiscordButton text={discordText} />
+          <PullButton reportId={report.id} weekStartIso={weekStartIso} />
+        </div>
       </div>
 
       {activeFlags.length > 0 && (
@@ -327,55 +323,6 @@ export default async function ReportPage({ params }: { params: { week: string } 
       </Card>
 
       <Card>
-        <Title>Layer 3 — Signal Notes</Title>
-        <Text className="mt-1">Watched, not headline KPIs — shown separately so they aren&apos;t mistaken for tracked metrics (FR-14).</Text>
-        <div className="mt-4 flex flex-col gap-4">
-          {report.signalNotes.map((s) => (
-            <form
-              key={s.id}
-              action={actions.saveSignalNote.bind(null, report.id, weekStartIso, s.signalType)}
-              className="border-b border-tremor-border pb-3 last:border-none flex flex-col gap-2"
-            >
-              <label className="text-tremor-default font-medium text-tremor-content-emphasis">{SIGNAL_LABELS[s.signalType]}</label>
-              <textarea
-                name={`note-${s.signalType}`}
-                defaultValue={s.note ?? ""}
-                rows={2}
-                placeholder="Note"
-                className="rounded-tremor-default border border-tremor-border px-2 py-1 text-tremor-default"
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="number"
-                  step="any"
-                  name={`value-${s.signalType}`}
-                  defaultValue={s.value ?? ""}
-                  placeholder="value (optional)"
-                  className="w-40 rounded-tremor-default border border-tremor-border px-2 py-1 text-tremor-default"
-                />
-                <input
-                  type="text"
-                  name={`naReason-${s.signalType}`}
-                  defaultValue={s.naReason ?? ""}
-                  placeholder="N/A — reason (if leaving note/value blank)"
-                  className="min-w-[220px] flex-1 rounded-tremor-default border border-tremor-border px-2 py-1 text-tremor-default"
-                />
-                {s.signalType === "organic_impressions" && (
-                  <label className="flex items-center gap-1 text-tremor-default">
-                    <input type="checkbox" name={`needsFollowup-${s.signalType}`} defaultChecked={s.needsFollowup} />
-                    Needs follow-up within 48h
-                  </label>
-                )}
-                <button type="submit" className="rounded-tremor-default border border-tremor-border px-3 py-1 text-tremor-default">
-                  Save
-                </button>
-              </div>
-            </form>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
         <Title>Layer 4 — Search Visibility</Title>
         <form action={saveSearch} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <NaField
@@ -466,100 +413,6 @@ export default async function ReportPage({ params }: { params: { week: string } 
         </div>
       </Card>
 
-      <Card>
-        <Title>Decisions ({report.decisions.length})</Title>
-        <Text className="mt-1">
-          Every decision must be <strong>Specific</strong>, <strong>Time-bound</strong>, and <strong>Falsifiable</strong>.
-          Bad: &ldquo;we should do more content.&rdquo; Good: &ldquo;post 2 additional Twitter threads on &lsquo;Graphs vs.
-          Vector Databases&rsquo; this week.&rdquo;
-        </Text>
-        <div className="mt-4 flex flex-col gap-3">
-          {report.decisions.map((dcs) => (
-            <div key={dcs.id} className="rounded-tremor-default border border-tremor-border p-3">
-              <p className="text-tremor-default">{dcs.text}</p>
-              <form action={actions.updateDecisionChecks.bind(null, dcs.id, weekStartIso)} className="mt-2 flex flex-wrap items-center gap-4">
-                <label className="flex items-center gap-1 text-tremor-default">
-                  <input type="checkbox" name="isSpecific" defaultChecked={dcs.isSpecific} /> Specific
-                </label>
-                <label className="flex items-center gap-1 text-tremor-default">
-                  <input type="checkbox" name="isTimeBound" defaultChecked={dcs.isTimeBound} /> Time-bound
-                </label>
-                <label className="flex items-center gap-1 text-tremor-default">
-                  <input type="checkbox" name="isFalsifiable" defaultChecked={dcs.isFalsifiable} /> Falsifiable
-                </label>
-                <button type="submit" className="rounded-tremor-default border border-tremor-border px-3 py-1 text-tremor-default">
-                  Save
-                </button>
-              </form>
-              <form action={actions.deleteDecision.bind(null, dcs.id, weekStartIso)} className="mt-1">
-                <button type="submit" className="text-xs text-red-600 hover:underline">
-                  Delete
-                </button>
-              </form>
-            </div>
-          ))}
-        </div>
-        <form action={addDecisionAction} className="mt-4 flex flex-col gap-2 border-t border-tremor-border pt-4">
-          <textarea
-            name="text"
-            required
-            rows={2}
-            placeholder='e.g. "Pause reddit-ads spend this week and reallocate the budget to the blog content cluster."'
-            className="rounded-tremor-default border border-tremor-border px-2 py-1 text-tremor-default"
-          />
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-1 text-tremor-default">
-              <input type="checkbox" name="isSpecific" /> Specific
-            </label>
-            <label className="flex items-center gap-1 text-tremor-default">
-              <input type="checkbox" name="isTimeBound" /> Time-bound
-            </label>
-            <label className="flex items-center gap-1 text-tremor-default">
-              <input type="checkbox" name="isFalsifiable" /> Falsifiable
-            </label>
-          </div>
-          <button type="submit" className="w-fit rounded-tremor-default bg-tremor-brand px-4 py-2 text-tremor-default font-medium text-tremor-brand-inverted hover:bg-tremor-brand-emphasis">
-            Add Decision
-          </button>
-        </form>
-      </Card>
-
-      <Card>
-        <Title>Lifecycle</Title>
-        <div className="mt-4 flex flex-wrap items-center gap-4">
-          {report.status === "draft" && (
-            <form action={actions.transitionToReadyForDecisions.bind(null, report.id, weekStartIso)}>
-              <button
-                type="submit"
-                disabled={!readyCheck.ok}
-                className="w-fit rounded-tremor-default bg-tremor-brand px-4 py-2 text-tremor-default font-medium text-tremor-brand-inverted hover:bg-tremor-brand-emphasis disabled:opacity-50"
-              >
-                Mark Ready for Decisions
-              </button>
-            </form>
-          )}
-          {!readyCheck.ok && <Text className="text-red-600">Missing before Ready for Decisions: {readyCheck.missingFields.join(", ")}</Text>}
-          {report.status !== "published" && (
-            <form action={actions.publishReport.bind(null, report.id, weekStartIso)}>
-              <button
-                type="submit"
-                disabled={!publishCheck.ok}
-                className="w-fit rounded-tremor-default bg-emerald-600 px-4 py-2 text-tremor-default font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                Publish
-              </button>
-            </form>
-          )}
-          {!publishCheck.ok && <Text className="text-tremor-content">{publishCheck.reason}</Text>}
-          <CopyDiscordButton text={discordText} />
-        </div>
-        {report.status === "published" && (
-          <Text className="mt-2 text-emerald-600">
-            Published {report.publishedAt?.toISOString().slice(0, 16).replace("T", " ")} UTC — no automated posting
-            happens on publish; use the copy button above to share the summary manually wherever makes sense.
-          </Text>
-        )}
-      </Card>
     </div>
   );
 }

@@ -4,9 +4,6 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { pullAllAutomatedMetrics } from "@/lib/metrics/pullMetrics";
 import { evaluateTriggersForReport } from "@/lib/triggers/runner";
-import { canMoveToReadyForDecisions, canPublish } from "@/lib/reportLifecycle";
-import { getReportById } from "@/lib/data/reportQueries";
-import type { SignalType } from "@prisma/client";
 
 function numOrNull(formData: FormData, key: string): number | null {
   const raw = formData.get(key);
@@ -99,24 +96,6 @@ export async function saveWeeklyExtras(reportId: string, weekStartIso: string, f
   revalidateReport(weekStartIso);
 }
 
-export async function saveSignalNote(reportId: string, weekStartIso: string, signalType: SignalType, formData: FormData) {
-  const note = strOrNull(formData, `note-${signalType}`);
-  const value = numOrNull(formData, `value-${signalType}`);
-  const naReason = strOrNull(formData, `naReason-${signalType}`);
-  const needsFollowup = formData.get(`needsFollowup-${signalType}`) === "on";
-
-  await prisma.signalNote.updateMany({
-    where: { reportId, signalType },
-    data: {
-      note,
-      value,
-      naReason: note === null && value === null ? naReason : null,
-      needsFollowup,
-    },
-  });
-  revalidateReport(weekStartIso);
-}
-
 export async function saveSearchVisibility(reportId: string, weekStartIso: string, formData: FormData) {
   const brandedImpressions = numOrNull(formData, "brandedImpressions");
   const brandedClicks = numOrNull(formData, "brandedClicks");
@@ -133,68 +112,8 @@ export async function saveSearchVisibility(reportId: string, weekStartIso: strin
   revalidateReport(weekStartIso);
 }
 
-export async function addDecision(reportId: string, weekStartIso: string, formData: FormData) {
-  const text = strOrNull(formData, "text");
-  if (!text) return;
-  await prisma.decision.create({
-    data: {
-      reportId,
-      text,
-      isSpecific: formData.get("isSpecific") === "on",
-      isTimeBound: formData.get("isTimeBound") === "on",
-      isFalsifiable: formData.get("isFalsifiable") === "on",
-    },
-  });
-  revalidateReport(weekStartIso);
-}
-
-export async function updateDecisionChecks(decisionId: string, weekStartIso: string, formData: FormData) {
-  await prisma.decision.update({
-    where: { id: decisionId },
-    data: {
-      isSpecific: formData.get("isSpecific") === "on",
-      isTimeBound: formData.get("isTimeBound") === "on",
-      isFalsifiable: formData.get("isFalsifiable") === "on",
-    },
-  });
-  revalidateReport(weekStartIso);
-}
-
-export async function deleteDecision(decisionId: string, weekStartIso: string) {
-  await prisma.decision.delete({ where: { id: decisionId } });
-  revalidateReport(weekStartIso);
-}
-
 export async function resolveFlag(flagId: string, weekStartIso: string, formData: FormData) {
   const resolvedAction = strOrNull(formData, "resolvedAction");
   await prisma.interventionFlag.update({ where: { id: flagId }, data: { resolvedAction } });
-  revalidateReport(weekStartIso);
-}
-
-/// Both transition actions re-validate server-side (the button that submits
-/// them is already disabled client-side when the same check fails — this is
-/// defense in depth, not the primary UX). They return void rather than a
-/// result object: this project pins React 18.3.1 (matching the companion
-/// app), which has no useActionState/useFormState to surface a return value
-/// from a plain <form action={...}> — the page re-renders with fresh data
-/// either way, and an ineligible transition is a silent no-op.
-export async function transitionToReadyForDecisions(reportId: string, weekStartIso: string): Promise<void> {
-  const report = await getReportById(reportId);
-  if (!report) return;
-  const check = canMoveToReadyForDecisions(report);
-  if (!check.ok) return;
-  await prisma.weeklyReport.update({ where: { id: reportId }, data: { status: "ready_for_decisions" } });
-  revalidateReport(weekStartIso);
-}
-
-export async function publishReport(reportId: string, weekStartIso: string): Promise<void> {
-  const report = await getReportById(reportId);
-  if (!report) return;
-  const check = canPublish(report.decisions);
-  if (!check.ok) return;
-  await prisma.weeklyReport.update({
-    where: { id: reportId },
-    data: { status: "published", publishedAt: new Date() },
-  });
   revalidateReport(weekStartIso);
 }

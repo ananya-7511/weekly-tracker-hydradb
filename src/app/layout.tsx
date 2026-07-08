@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Weekly GTM Analytics Tracker — HydraDB",
-  description: "Weekly GTM reporting: outcome/channel/signal metrics, intervention triggers, decision log",
+  description: "Weekly GTM metrics tracking: outcome/channel/search/mentions metrics and intervention triggers",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

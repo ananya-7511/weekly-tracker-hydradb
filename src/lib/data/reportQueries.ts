@@ -2,26 +2,22 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mondayOf, weekEndOf } from "@/lib/dateWindow";
 
-const SIGNAL_TYPES = ["source_quality", "time_to_activation", "organic_impressions", "churned_inactive"] as const;
-
 const FULL_REPORT_INCLUDE = {
   outcomeMetrics: true,
   channelMetrics: { orderBy: { utmSource: "asc" as const } },
   weeklyExtras: true,
-  signalNotes: true,
   searchVisibility: true,
   brandMentions: { orderBy: { postedDate: "desc" as const } },
   interventionFlags: { orderBy: { createdAt: "asc" as const } },
-  decisions: { orderBy: { createdAt: "asc" as const } },
 };
 
 export type FullReport = NonNullable<Awaited<ReturnType<typeof getReportByWeekStart>>>;
 
 /// FR-1: exactly one WeeklyReport per Monday-starting window. Creates the
-/// child rows (OutcomeMetrics/WeeklyExtras/SearchVisibilityMetrics/SignalNote x4)
-/// up front so every required field is visible as an explicit blank in the UI
-/// from the moment a week starts, rather than appearing only once someone
-/// happens to fill something in.
+/// child rows (OutcomeMetrics/WeeklyExtras/SearchVisibilityMetrics) up front so
+/// every required field is visible as an explicit blank in the UI from the
+/// moment a week starts, rather than appearing only once someone happens to
+/// fill something in.
 export async function getOrCreateReportForWeek(weekStart: Date) {
   const existing = await prisma.weeklyReport.findUnique({
     where: { weekStartDate: weekStart },
@@ -38,7 +34,6 @@ export async function getOrCreateReportForWeek(weekStart: Date) {
         outcomeMetrics: { create: {} },
         weeklyExtras: { create: {} },
         searchVisibility: { create: {} },
-        signalNotes: { create: SIGNAL_TYPES.map((signalType) => ({ signalType })) },
       },
       include: FULL_REPORT_INCLUDE,
     });
@@ -67,14 +62,10 @@ export async function getReportByWeekStart(weekStartIso: string) {
   return prisma.weeklyReport.findUnique({ where: { weekStartDate: weekStart }, include: FULL_REPORT_INCLUDE });
 }
 
-export async function getReportById(reportId: string) {
-  return prisma.weeklyReport.findUnique({ where: { id: reportId }, include: FULL_REPORT_INCLUDE });
-}
-
 /// For the /trends historical index and prior/next navigation on a report page.
 export async function listReportWeeks() {
   return prisma.weeklyReport.findMany({
-    select: { id: true, weekStartDate: true, weekEndDate: true, status: true },
+    select: { id: true, weekStartDate: true, weekEndDate: true },
     orderBy: { weekStartDate: "desc" },
   });
 }
