@@ -35,6 +35,14 @@ interface QueryRow {
 
 /// Queries branded terms only (Open Question #9 — a defined list, not an ad hoc
 /// filter, so the metric is reproducible week to week).
+///
+/// CONFIRMED LIVE: the Search Analytics API's dimensionFilterGroups only
+/// supports combining filters within one group with "AND" — passing multiple
+/// "contains" filters to OR-match any branded term (as the PRD's own framing
+/// implies: "hydradb", "hydra db", common misspellings) isn't supported by a
+/// single request. So this runs one query per term instead and merges the
+/// results, deduping by query string (a query matching more than one term
+/// would otherwise get double-counted).
 async function queryBrandedRows(
   startDate: Date,
   endDate: Date,
@@ -42,31 +50,38 @@ async function queryBrandedRows(
 ): Promise<QueryRow[] | null> {
   try {
     const client = getClient();
-    const res = await client.searchanalytics.query({
-      siteUrl: process.env.GOOGLE_SEARCH_CONSOLE_SITE_URL,
-      requestBody: {
-        startDate: toDateStr(startDate),
-        endDate: toDateStr(endDate),
-        dimensions: ["query"],
-        dimensionFilterGroups: [
-          {
-            groupType: "or",
-            filters: brandedQueryTerms.map((term) => ({
-              dimension: "query",
-              operator: "contains",
-              expression: term,
-            })),
+    const perTermResults = await Promise.all(
+      brandedQueryTerms.map((term) =>
+        client.searchanalytics.query({
+          siteUrl: process.env.GOOGLE_SEARCH_CONSOLE_SITE_URL,
+          requestBody: {
+            startDate: toDateStr(startDate),
+            endDate: toDateStr(endDate),
+            dimensions: ["query"],
+            dimensionFilterGroups: [
+              { groupType: "AND", filters: [{ dimension: "query", operator: "contains", expression: term }] },
+            ],
+            rowLimit: 500,
           },
-        ],
-        rowLimit: 500,
-      },
-    });
-    return (res.data.rows ?? []).map((row) => ({
-      query: row.keys?.[0] ?? "",
-      impressions: row.impressions ?? 0,
-      clicks: row.clicks ?? 0,
-      position: row.position ?? 0,
-    }));
+        })
+      )
+    );
+
+    const byQuery = new Map<string, QueryRow>();
+    for (const res of perTermResults) {
+      for (const row of res.data.rows ?? []) {
+        const query = row.keys?.[0] ?? "";
+        if (!byQuery.has(query)) {
+          byQuery.set(query, {
+            query,
+            impressions: row.impressions ?? 0,
+            clicks: row.clicks ?? 0,
+            position: row.position ?? 0,
+          });
+        }
+      }
+    }
+    return [...byQuery.values()];
   } catch {
     return null;
   }
